@@ -4,14 +4,15 @@ import pandas as pd
 import re
 import os
 
-# 1. 페이지 설정
-st.set_page_config(page_title="엘리베이터 BOM 통합 분석기 V1.0 ", layout="wide")
+# 1. 페이지 설정 (웹 브라우저 탭 제목)
+st.set_page_config(page_title="SMC OPB생산 BOM통합 시스템", layout="wide")
 
 if os.path.exists("logo.png"):
     st.image("logo.png", width=150)
 
-st.title("SMC OPB 생산 BOM 통합 시스템")
-st.write("OPB 표판 두께(3t) 및 비상통화 표시등 등 비표준 사양을 정밀 분석합니다.")
+# 메인 제목에서 공장 아이콘 제거
+st.title("SMC OPB생산 BOM통합 시스템")
+st.write("OPB 생산에 특화된 비표준 사양 감지 및 자재 명세 분석 시스템입니다.")
 
 uploaded_file = st.file_uploader("분석할 BOM PDF 파일을 선택하세요", type="pdf")
 
@@ -43,7 +44,6 @@ if uploaded_file:
     
     col_warn1, col_warn2 = st.columns(2)
     with col_warn1:
-        # 두께 3t 사양 감지 시 빨간색 경고
         if opb_3t:
             st.error("🚨 **비표준 사양: OPB 표판 두께 3t 적용 (제작 주의)**")
         st.warning(f"🚪 **열림방향(MAIN): {open_direction}**")
@@ -97,7 +97,7 @@ if uploaded_file:
         else:
             st.success("✅ **비상통화장치 동작 표시등: 미적용**")
 
-    # 6. 자재 리스트 분석
+    # 6. 자재 리스트 분석 (중복 컬럼 에러 방지 포함)
     if all_tables:
         df_raw = pd.DataFrame(all_tables)
         header_idx = 0
