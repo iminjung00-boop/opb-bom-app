@@ -11,7 +11,7 @@ if os.path.exists("logo.png"):
     st.image("logo.png", width=150)
 
 st.title("SMC OPB생산 BOM통합 시스템 V 1.0")
-st.write("PCB SPEC 옵션 분류 및 비표준 제작 사양을 정밀 분석합니다.")
+st.write("PCB 상세 옵션(IND/SD/GS) 및 비표준 제작 사양을 정밀 분석합니다.")
 
 uploaded_file = st.file_uploader("분석할 BOM PDF 파일을 선택하세요", type="pdf")
 
@@ -59,22 +59,24 @@ if uploaded_file:
     st.divider()
 
     # ---------------------------------------------------------
-    # 4. 🧩 PCB SPEC 옵션 분류 (새로 추가된 기능)
+    # 4. 🧩 PCB SPEC 옵션 분류 (상세 코드 추출 강화)
     # ---------------------------------------------------------
-    st.subheader("🧩 PCB SPEC 옵션 분류")
+    st.subheader("🧩 PCB 상세 옵션 사양")
     
-    # PCB 관련 핵심 키워드 추출 (IOA, EN81, MAIN&SUB 등) 
-    main_pcb = re.search(r"GT\.?\s*MAIN(?:&SUB)?\s*OPB.*?(IOA|EN81[A-Z0-9-]*)", all_text, re.IGNORECASE)
-    dis_pcb = re.search(r"GT\.?\s*DIS\s*OPB.*?(IOA|EN81[A-Z0-9-]*)", all_text, re.IGNORECASE)
-    voice_pcb = "VOICE" in all_text
+    # [수정] "MAIN&SUB OPB" 및 "DIS OPB" 뒤에 오는 IND:X.SD:X.G/S 형태의 코드를 정밀 추출합니다.
+    # 문래힐스테이트 등에서 보이는 IND:X.SD:0.G/S 패턴을 완벽히 잡습니다.
+    main_pcb_match = re.search(r"MAIN(?:&SUB)?\s*OPB.*?(I[N|V]D:?[^\n,]+G/S)", all_text, re.IGNORECASE)
+    dis_pcb_match = re.search(r"DIS\s*OPB.*?(I[N|V]D:?[^\n,]+G/S)", all_text, re.IGNORECASE)
     
-    pcb_c1, pcb_c2, pcb_c3 = st.columns(3)
+    pcb_c1, pcb_c2 = st.columns(2)
     with pcb_c1:
-        st.success(f"🖥️ **MAIN PCB 사양**\n\n{main_pcb.group(0) if main_pcb else '일반 사양'}")
+        # 이앤씨 현장의 경우 "IND:X.SD:X.G/S" 등이 표시됩니다.
+        pcb_val = main_pcb_match.group(1).strip() if main_pcb_match else "일반 사양"
+        st.success(f"🖥️ **MAIN PCB 상세 옵션**\n\n{pcb_val}")
     with pcb_c2:
-        st.success(f"♿ **장애자용 PCB 사양**\n\n{dis_pcb.group(0) if dis_pcb else '미적용 또는 일반'}")
-    with pcb_c3:
-        st.success(f"🔊 **음성/통화 PCB 옵션**\n\n{'VOICE SYNTHESIZER 적용' if voice_pcb else '미적용'}")
+        # 장애자용 PCB 사양 코드 표시
+        dis_val = dis_pcb_match.group(1).strip() if dis_pcb_match else "미적용 또는 일반"
+        st.success(f"♿ **장애자용 PCB 상세 옵션**\n\n{dis_val}")
 
     st.divider()
 
@@ -122,7 +124,6 @@ if uploaded_file:
         df = df_raw.iloc[header_idx+1:].reset_index(drop=True).dropna(axis=1, how='all')
 
         st.subheader("🔘 버튼 및 PCB 투입 명세")
-        # PCB와 버튼을 함께 필터링하여 보여줌 
         target_mask = df.astype(str).apply(lambda x: x.str.contains('BUTTON|버튼|HIP|PCB|BOARD|IOA', case=False, na=False)).any(axis=1)
         st.table(df[target_mask])
 
