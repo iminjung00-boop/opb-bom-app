@@ -11,7 +11,7 @@ if os.path.exists("logo.png"):
     st.image("logo.png", width=150)
 
 st.title("SMC OPB생산 BOM통합 시스템 V 1.0")
-st.write("BOM에 기재된 실무 핵심 사양(BOX, PCB 설정, S/W PANEL)을 실시간으로 분석합니다.")
+st.write("PCB 설정(IND/SD) 인식 로직을 강화하여 누락 없는 분석을 지원합니다.")
 
 uploaded_file = st.file_uploader("분석할 BOM PDF 파일을 선택하세요", type="pdf")
 
@@ -59,19 +59,22 @@ if uploaded_file:
     st.divider()
 
     # ---------------------------------------------------------
-    # 4. 🎛️ OPB 및 S/W PANEL 상세 제작 사양
+    # 4. 🎛️ OPB 및 S/W PANEL 상세 제작 사양 (로직 대폭 보강)
     # ---------------------------------------------------------
     st.subheader("🎛️ OPB 및 S/W PANEL 상세 제작 사양")
     
-    # [핵심 수정] PCB 설정 (IND:X SD:O 등) 추출 로직 강화
-    # IND와 SD 사이의 모든 문자(공백, 점 등)를 무시하고 G/S 전까지 모두 가져옵니다.
-    pcb_pattern = re.search(r"IN[D|V]:?([^\s,.]+)[.\s]*SD:?([^\s,.]+)", all_text, re.IGNORECASE)
-    if pcb_pattern:
-        pcb_setting_val = f"IND:{pcb_pattern.group(1)}  SD:{pcb_pattern.group(2)}"
+    # [무조건 추출 로직] IND와 SD 값을 텍스트 전역에서 개별적으로라도 찾아냅니다.
+    ind_val = re.search(r"IND\s*[:\s]*([A-Z0-9]+)", all_text, re.IGNORECASE)
+    sd_val = re.search(r"SD\s*[:\s]*([A-Z0-9]+)", all_text, re.IGNORECASE)
+    
+    if ind_val and sd_val:
+        pcb_setting_val = f"IND:{ind_val.group(1)} / SD:{sd_val.group(1)}"
+    elif ind_val:
+        pcb_setting_val = f"IND:{ind_val.group(1)} (SD 미확인)"
     else:
-        # 패턴이 없을 경우 차선책으로 주변 텍스트 추출
-        fallback = re.search(r"IN[D|V]:?[^,\n]+G/S", all_text, re.IGNORECASE)
-        pcb_setting_val = fallback.group(0).strip() if fallback else "정보 없음"
+        # 통합 패턴 재시도 (문래힐스테이트 형식)
+        fallback = re.search(r"I[N|V]D[:\s]*([^\s.]+)[.\s]*SD[:\s]*([^\s.]+)", all_text, re.IGNORECASE)
+        pcb_setting_val = f"IND:{fallback.group(1)} SD:{fallback.group(2)}" if fallback else "정보 없음"
 
     box_pattern = re.compile(r"BOX\s*[:\s]*([\d\s*xX,]{5,20})", re.IGNORECASE)
     box_match = box_pattern.search(all_text)
@@ -93,7 +96,7 @@ if uploaded_file:
     with r1_c2:
         st.info(f"📏 **MAIN BOX size**\n\n{box_size_val}")
     with r1_c3:
-        # 이제 IND:X SD:O 형태로 정확히 표시됩니다.
+        # 보강된 PCB 설정값 출력
         st.success(f"🧩 **PCB 설정 (IND/SD)**\n\n{pcb_setting_val}")
 
     r2_c1, r2_c2, r2_c3 = st.columns(3)
