@@ -11,8 +11,8 @@ st.set_page_config(page_title="엘리베이터 BOM 통합 분석기", layout="wi
 if os.path.exists("logo.png"):
     st.image("logo.png", width=150)
 
-st.title("SMC OPM생산 BOM 통합 분석 시스템")
-st.write("열림방향 및 비표준 사양을 자동으로 감지하여 생산 실수를 방지합니다.")
+st.title("🏭 엘리베이터 생산 BOM 통합 분석 시스템")
+st.write("열림방향, 전체 층수 및 비표준 사양을 자동으로 분석하여 생산 효율을 높입니다.")
 
 uploaded_file = st.file_uploader("분석할 BOM PDF 파일을 선택하세요", type="pdf")
 
@@ -32,40 +32,36 @@ if uploaded_file:
 
     st.header(f"📊 {project} ({unit})")
 
-    # 3. 🚨 생산 주의사항 (열림방향/비표준/면취)
+    # 3. 🚨 생산 핵심 주의사항 (열림방향 / 비표준)
     st.subheader("⚠️ 생산 핵심 주의사항")
     
-    # --- 열림방향(MAIN) 추출 로직 ---
-    # '열림방향' 뒤에 오는 단어(좌, 우, 양방향 등)를 추출합니다.
+    # 열림방향(MAIN) 및 TOTAL FLOOR 추출
     open_dir_match = re.search(r"열림방향(?:\(MAIN\))?\s*[:\s]*([가-힣A-Z]+)", all_text)
-    open_direction = open_dir_match.group(1) if open_dir_match else None
+    open_direction = open_dir_match.group(1) if open_dir_match else "미확인"
+    
+    # TOTAL FLOOR 추출 (숫자+F 또는 숫자만)
+    floor_match = re.search(r"TOTAL\s*FLOOR\s*[:\s]*([\d\/\s]+F?)", all_text, re.IGNORECASE)
+    total_floor = floor_match.group(1).strip() if floor_match else "미확인"
 
-    # 비표준 도면(DWG.) 추출
+    # 비표준 도면(DWG.)
     dwgs = re.findall(r"DWG\.?\s*([0-9A-Z]{7,10})", all_text)
     
-    col1, col2 = st.columns(2)
-    with col1:
-        # 열림방향 강조 표시
-        if open_direction:
-            st.warning(f"🚪 **열림방향(MAIN): {open_direction}**")
-        else:
-            st.info("열림방향 정보가 텍스트에 없습니다. 도면을 확인하세요.")
-            
-        # 면취가공 및 기타 알림
+    col_warn1, col_warn2 = st.columns(2)
+    with col_warn1:
+        st.warning(f"🚪 **열림방향(MAIN):** {open_direction}")
         if "면취" in all_text:
-            st.warning("🔧 DIS OPB 하부 면취가공 사양 포함")
-
-    with col2:
-        # 비표준 도면 강조 표시
+            st.warning("🔧 **DIS OPB 하부 면취가공 사양 포함**")
+            
+    with col_warn2:
         if dwgs:
             for d in set(dwgs):
-                st.error(f"🚨 비표준 도면 확인 필수: {d}")
+                st.error(f"🚨 **비표준 도면 확인 필수:** {d}")
         else:
-            st.success("표준 도면 사양입니다.")
+            st.success("✅ **표준 도면 사양 (특이사항 없음)**")
 
     st.divider()
 
-    # 4. NAME PLATE 및 주요 자재 분석
+    # 4. 📋 핵심 제작 사양 (NAME PLATE / BOX / FLOOR)
     if all_tables:
         df_raw = pd.DataFrame(all_tables)
         header_idx = 0
@@ -76,24 +72,30 @@ if uploaded_file:
         df_raw.columns = df_raw.iloc[header_idx]
         df = df_raw.iloc[header_idx+1:].reset_index(drop=True).dropna(axis=1, how='all')
 
-        st.subheader("📋 핵심 제작 사양 (NAME PLATE / BOX)")
+        st.subheader("📋 핵심 제작 사양 요약")
         
-        # NAME PLATE 필터링
+        # 상단 요약 정보 (4칸 구성)
+        c1, c2, c3, c4 = st.columns(4)
+        
+        box_size = re.search(r"BOX\s*[:\s]*([\d\s*xX]+)", all_text)
+        material = "MIRROR" if any(k in all_text for k in ["미러", "MIRROR"]) else "HAIRLINE"
+        
+        with c1:
+            st.metric("🏢 TOTAL FLOOR", total_floor)
+        with c2:
+            st.metric("📏 BOX 규격", box_size.group(1) if box_size else "미확인")
+        with c3:
+            st.metric("✨ 표면 사양", f"ST'S {material}")
+        with c4:
+            st.metric("🚪 열림방향", open_direction)
+
+        # NAME PLATE 별도 표
         name_plate_mask = df.astype(str).apply(lambda x: x.str.contains('NAME PLATE|명판|NAMEPLATE', case=False, na=False)).any(axis=1)
         name_plate_df = df[name_plate_mask]
-
-        c_left, c_right = st.columns([2, 1])
-        with c_left:
-            if not name_plate_df.empty:
-                st.table(name_plate_df) 
-            else:
-                st.info("BOM 내 NAME PLATE 상세 항목 없음")
-
-        with c_right:
-            box_size = re.search(r"BOX\s*[:\s]*([\d\s*xX]+)", all_text)
-            st.success(f"**BOX 규격:**\n\n{box_size.group(1) if box_size else '텍스트 확인 불가'}")
-            material = "MIRROR" if any(k in all_text for k in ["미러", "MIRROR"]) else "HAIRLINE"
-            st.warning(f"**표면 사양:**\n\nST'S {material}")
+        
+        if not name_plate_df.empty:
+            st.markdown("#### 🏷️ NAME PLATE 상세 정보")
+            st.table(name_plate_df)
 
         st.divider()
 
@@ -102,4 +104,4 @@ if uploaded_file:
         st.dataframe(df, use_container_width=True, hide_index=True)
         
     else:
-        st.error("PDF 표 데이터를 읽지 못했습니다.")
+        st.error("PDF 표 데이터를 읽을 수 없습니다.")
