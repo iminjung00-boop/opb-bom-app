@@ -10,7 +10,7 @@ st.set_page_config(page_title="엘리베이터 BOM 통합 분석기", layout="wi
 if os.path.exists("logo.png"):
     st.image("logo.png", width=150)
 
-st.title("🏭 엘리베이터 생산 BOM 통합 분석 시스템")
+st.title("SMC OPB 생산 BOM 통합 시스템")
 st.write("OPB 표판 두께(3t) 및 비상통화 표시등 등 비표준 사양을 정밀 분석합니다.")
 
 uploaded_file = st.file_uploader("분석할 BOM PDF 파일을 선택하세요", type="pdf")
