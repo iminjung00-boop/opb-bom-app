@@ -129,4 +129,3 @@ if uploaded_file:
         st.subheader("🔘 자재 투입 명세")
         target_mask = df.astype(str).apply(lambda x: x.str.contains('BUTTON|버튼|HIP|SJ21|PCB|BOARD|E280A|E281A', case=False, na=False)).any(axis=1)
         st.table(df[target_mask])
-        
