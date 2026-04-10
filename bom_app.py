@@ -10,7 +10,7 @@ st.set_page_config(page_title="엘리베이터 BOM 통합 분석기", layout="wi
 if os.path.exists("logo.png"):
     st.image("logo.png", width=150)
 
-st.title("SMC OPB 생산 BOM 통합 분석 시스템")
+st.title("SMC OPB 생산 BOM 통합 분석 시스템 V1.0")
 st.write("생산 주의사항을 최우선으로 확인하고, 상세 층수 및 버튼 구성을 분석합니다.")
 
 uploaded_file = st.file_uploader("분석할 BOM PDF 파일을 선택하세요", type="pdf")
