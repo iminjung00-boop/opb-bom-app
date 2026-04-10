@@ -11,7 +11,7 @@ st.set_page_config(page_title="엘리베이터 BOM 통합 분석기", layout="wi
 if os.path.exists("logo.png"):
     st.image("logo.png", width=150)
 
-st.title("🏭 엘리베이터 생산 BOM 통합 분석 시스템")
+st.title("OPB BOM 통합 분석 시스템")
 st.write("비표준 사양 감지 및 NAME PLATE/자재 명세를 자동으로 분석합니다.")
 
 uploaded_file = st.file_uploader("분석할 BOM PDF 파일을 선택하세요", type="pdf")
