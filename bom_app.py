@@ -11,7 +11,7 @@ if os.path.exists("logo.png"):
     st.image("logo.png", width=150)
 
 st.title("SMC OPB생산 BOM통합 시스템 V 1.0")
-st.write("BOM에 기재된 실제 BOX 규격을 실시간으로 추출하여 표시합니다.")
+st.write("PCB SPEC 옵션 분류 및 비표준 제작 사양을 정밀 분석합니다.")
 
 uploaded_file = st.file_uploader("분석할 BOM PDF 파일을 선택하세요", type="pdf")
 
@@ -59,17 +59,32 @@ if uploaded_file:
     st.divider()
 
     # ---------------------------------------------------------
-    # 4. 🎛️ OPB 및 S/W PANEL 상세 제작 사양
+    # 4. 🧩 PCB SPEC 옵션 분류 (새로 추가된 기능)
     # ---------------------------------------------------------
+    st.subheader("🧩 PCB SPEC 옵션 분류")
+    
+    # PCB 관련 핵심 키워드 추출 (IOA, EN81, MAIN&SUB 등) 
+    main_pcb = re.search(r"GT\.?\s*MAIN(?:&SUB)?\s*OPB.*?(IOA|EN81[A-Z0-9-]*)", all_text, re.IGNORECASE)
+    dis_pcb = re.search(r"GT\.?\s*DIS\s*OPB.*?(IOA|EN81[A-Z0-9-]*)", all_text, re.IGNORECASE)
+    voice_pcb = "VOICE" in all_text
+    
+    pcb_c1, pcb_c2, pcb_c3 = st.columns(3)
+    with pcb_c1:
+        st.success(f"🖥️ **MAIN PCB 사양**\n\n{main_pcb.group(0) if main_pcb else '일반 사양'}")
+    with pcb_c2:
+        st.success(f"♿ **장애자용 PCB 사양**\n\n{dis_pcb.group(0) if dis_pcb else '미적용 또는 일반'}")
+    with pcb_c3:
+        st.success(f"🔊 **음성/통화 PCB 옵션**\n\n{'VOICE SYNTHESIZER 적용' if voice_pcb else '미적용'}")
+
+    st.divider()
+
+    # 5. 🎛️ OPB 및 S/W PANEL 상세 제작 사양
     st.subheader("🎛️ OPB 및 S/W PANEL 상세 제작 사양")
     
-    # [핵심 수정] 이미지 사양(BOX: 164 x 1704)을 정확히 추출하는 정규식
-    # 숫자, x, X, *, 공백, 콤마 등을 모두 포함하여 규격 전체를 가져옵니다.
     box_pattern = re.compile(r"BOX\s*[:\s]*([\d\s*xX,]{5,20})", re.IGNORECASE)
     box_match = box_pattern.search(all_text)
     box_size_val = box_match.group(1).strip() if box_match else "정보 없음"
 
-    # S521A 등 사양 추출
     opb_spec_pattern = re.compile(r"([SD]\d{3}[A-Z]?[,.]?\s*\d?DIGIT\.?[,.]?\s*G/S|[SD]\d{3}[A-Z]{1,2})", re.IGNORECASE)
     opb_spec_search = opb_spec_pattern.search(all_text)
     opb_type_text = opb_spec_search.group(1).strip() if opb_spec_search else "정보 없음"
@@ -80,40 +95,15 @@ if uploaded_file:
     indicator_match = re.search(r"INDICATOR\s*DATA\s*[:\s]*([^\n]+)", all_text, re.IGNORECASE)
     indicator_text = indicator_match.group(1).strip() if indicator_match else "정보 없음"
     
-    # 레이아웃 배치
     r1_c1, r1_c2, r1_c3 = st.columns(3)
     with r1_c1:
-        st.info(f"✨ **OPB 타입/사양 (INDICATOR)**\n\n{opb_type_text}")
+        st.info(f"✨ **OPB 타입/사양**\n\n{opb_type_text}")
     with r1_c2:
-        # 여기에 164 x 1704 와 같은 값이 들어갑니다.
         st.info(f"📏 **MAIN BOX size**\n\n{box_size_val}")
     with r1_c3:
-        st.info(f"📄 **S/W PANEL 도면 (BOM 필수 확인)**\n\n{sw_panel_dwg.group(1) if sw_panel_dwg else '정보 없음'}")
+        st.info(f"📄 **S/W PANEL 도면**\n\n{sw_panel_dwg.group(1) if sw_panel_dwg else '정보 없음'}")
 
-    r2_c1, r2_c2, r2_c3 = st.columns(3)
-    with r2_c1:
-        st.info(f"📟 **인디케이터 표시 문구**\n\n{indicator_text}")
-    with r2_c2:
-        aircon_sw = "AIR-CON S/W 적용" in all_text or "에어컨" in all_text
-        st.info(f"❄️ **에어컨 스위치:** {'적용' if aircon_sw else '미적용'}")
-    with r2_c3:
-        skip_sw = "OWNER SKIP S/W 적용" in all_text or "오너스킵" in all_text
-        st.info(f"⏭️ **오너 스킵 스위치:** {'적용' if skip_sw else '미적용'}")
-    
     st.divider()
-
-    # 5. 핵심 제작 정보 요약
-    st.subheader("📋 핵심 제작 사양 요약")
-    floor_match = re.search(r"TOTAL\s*FLOOR\s*[:\s]*([^\n]+)", all_text, re.IGNORECASE)
-    material = "MIRROR" if any(k in all_text for k in ["미러", "MIRROR"]) else "HAIRLINE"
-
-    c_m1, c_m2, c_m3 = st.columns(3)
-    with c_m1:
-        st.metric("🏢 전체 층수 (TOTAL)", floor_match.group(1).strip() if floor_match else "미확인")
-    with c_m2:
-        st.metric("📏 MAIN BOX size (확인)", box_size_val)
-    with c_m3:
-        st.metric("✨ 표면 사양", f"ST'S {material}")
 
     # 6. 자재 리스트 분석
     if all_tables:
@@ -131,9 +121,10 @@ if uploaded_file:
         df_raw.columns = new_cols
         df = df_raw.iloc[header_idx+1:].reset_index(drop=True).dropna(axis=1, how='all')
 
-        st.subheader("🔘 버튼 투입 명세")
-        btn_mask = df.astype(str).apply(lambda x: x.str.contains('BUTTON|버튼|HIP|SJ21', case=False, na=False)).any(axis=1)
-        st.table(df[btn_mask])
+        st.subheader("🔘 버튼 및 PCB 투입 명세")
+        # PCB와 버튼을 함께 필터링하여 보여줌 
+        target_mask = df.astype(str).apply(lambda x: x.str.contains('BUTTON|버튼|HIP|PCB|BOARD|IOA', case=False, na=False)).any(axis=1)
+        st.table(df[target_mask])
 
         st.subheader("📦 전체 자재 리스트")
         st.dataframe(df, use_container_width=True, hide_index=True)
