@@ -5,7 +5,7 @@ import re
 import os
 
 # 1. 페이지 설정
-st.set_page_config(page_title="엘리베이터 BOM 통합 분석기", layout="wide")
+st.set_page_config(page_title="엘리베이터 BOM 통합 분석기 V1.0", layout="wide")
 
 if os.path.exists("logo.png"):
     st.image("logo.png", width=150)
