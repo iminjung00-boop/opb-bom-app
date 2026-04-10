@@ -11,7 +11,7 @@ if os.path.exists("logo.png"):
     st.image("logo.png", width=150)
 
 st.title("SMC OPB생산 BOM통합 시스템 V 1.1")
-st.write("전체 층수 구성과 기준층, 에어컨/오너스킵 등 모든 제작 정보를 실시간으로 분석합니다.")
+st.write("전체 층수 구성, 기준층, OPB 타입, 에어컨/오너스킵 등 모든 제작 정보를 실시간 분석합니다.")
 
 uploaded_file = st.file_uploader("분석할 BOM PDF 파일을 선택하세요", type="pdf")
 
@@ -52,11 +52,10 @@ if uploaded_file:
 
     st.divider()
 
-    # 4. 📋 핵심 제작 사양 요약 (층수 정보 포함)
+    # 4. 📋 핵심 제작 사양 요약 (층수 및 재질)
     st.subheader("📋 핵심 제작 사양 요약")
     
-    # [핵심] 이미지 속 TOTAL FLOOR 및 기준층 정보 정밀 추출
-    # 예: TOTAL FLOOR : B2,B1,1,2,3,4,5,6 , 기준층 : 1
+    # [층수 정보 추출]
     floor_info_match = re.search(r"TOTAL\s*FLOOR\s*[:\s]*([0-9A-Z,\s]+)", all_text, re.IGNORECASE)
     total_floors = floor_info_match.group(1).strip() if floor_info_match else "미확인"
     
@@ -72,26 +71,31 @@ if uploaded_file:
 
     st.divider()
 
-    # 5. 🎛️ OPB 및 S/W PANEL 상세 사양
+    # 5. 🎛️ OPB 및 S/W PANEL 상세 사양 (INDICATOR 사양 복구)
     st.subheader("🎛️ OPB 및 S/W PANEL 상세 사양")
+    
+    # [복구] OPB 타입/사양 (S521A, 2DIGIT 등)
+    opb_spec_pattern = re.compile(r"([SD]\d{3}[A-Z]?[,.]?\s*\d?DIGIT\.?[,.]?\s*G/S|[SD]\d{3}[A-Z]{1,2})", re.IGNORECASE)
+    opb_spec_search = opb_spec_pattern.search(all_text)
+    opb_type_text = opb_spec_search.group(1).strip() if opb_spec_search else "정보 없음"
     
     box_match = re.search(r"BOX\s*[:\s]*([\d\s*xX,]{5,20})", all_text, re.IGNORECASE)
     sw_dwg = re.search(r"S/W\s*PANEL.*?DWG\s*NO\.?\s*[:\s]*([0-9A-Z]+)", all_text, re.IGNORECASE | re.DOTALL)
     
-    # 에어컨, 오너스킵 취부 여부
+    r1_c1, r1_c2, r1_c3 = st.columns(3)
+    with r1_c1: st.info(f"✨ **OPB 타입/사양 (INDICATOR)**\n\n{opb_type_text}")
+    with r1_c2: st.info(f"📏 **MAIN BOX size**\n\n{box_match.group(1).strip() if box_match else '정보 없음'}")
+    with r1_c3: st.info(f"📄 **S/W PANEL 도면**\n\n{sw_dwg.group(1) if sw_dwg else '정보 없음'}")
+
+    # 에어컨, 오너스킵 취부 여부 및 인디케이터 문구
     aircon_sw = any(k in all_text for k in ["AIR-CON S/W 적용", "에어컨"])
     skip_sw = any(k in all_text for k in ["OWNER SKIP S/W 적용", "오너스킵"])
+    indicator_data = re.search(r"INDICATOR\s*DATA\s*[:\s]*([^\n]+)", all_text, re.IGNORECASE)
 
-    r1_c1, r1_c2, r1_c3 = st.columns(3)
-    with r1_c1: st.info(f"📏 **MAIN BOX size**\n\n{box_match.group(1).strip() if box_match else '정보 없음'}")
-    with r1_c2: st.info(f"📄 **S/W PANEL 도면**\n\n{sw_dwg.group(1) if sw_dwg else '정보 없음'}")
-    with r1_c3: 
-        indicator_data = re.search(r"INDICATOR\s*DATA\s*[:\s]*([^\n]+)", all_text, re.IGNORECASE)
-        st.info(f"📟 **인디케이터 문구**\n\n{indicator_data.group(1).strip() if indicator_data else '정보 없음'}")
-
-    r2_c1, r2_c2 = st.columns(2)
+    r2_c1, r2_c2, r2_c3 = st.columns(3)
     with r2_c1: st.success(f"❄️ **에어컨 S/W 취부:** {'✅ 적용' if aircon_sw else '❌ 미적용'}")
     with r2_c2: st.success(f"⏭️ **오너스킵 S/W 취부:** {'✅ 적용' if skip_sw else '❌ 미적용'}")
+    with r2_c3: st.info(f"📟 **인디케이터 문구**\n\n{indicator_data.group(1).strip() if indicator_data else '정보 없음'}")
 
     st.divider()
 
