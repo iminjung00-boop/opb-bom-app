@@ -11,7 +11,7 @@ if os.path.exists("logo.png"):
     st.image("logo.png", width=150)
 
 st.title("SMC OPB생산 BOM통합 시스템 V 1.0")
-st.write("S/W PANEL 및 비표준 사양을 정밀 분석합니다.")
+st.write("S/W PANEL, 인디케이터 문구 및 비표준 사양을 정밀 분석합니다.")
 
 uploaded_file = st.file_uploader("분석할 BOM PDF 파일을 선택하세요", type="pdf")
 
@@ -59,29 +59,32 @@ if uploaded_file:
     st.divider()
 
     # ---------------------------------------------------------
-    # 4. 🎛️ S/W PANEL 상세 사양 (도면 확인 문구 추가)
+    # 4. 🎛️ S/W PANEL 및 INDICATOR 상세 사양
     # ---------------------------------------------------------
-    st.subheader("🎛️ S/W PANEL 상세 사양")
+    st.subheader("🎛️ S/W PANEL 및 인디케이터 상세 사양")
     
-    # S/W PANEL DWG NO. 추출 로직 (더 유연하게 수정)
+    # S/W PANEL 및 INDICATOR DATA 추출
     sw_dwg_pattern = re.compile(r"S/W\s*PANEL.*?DWG\s*NO\.?\s*[:\s]*([0-9A-Z]+)", re.IGNORECASE | re.DOTALL)
     sw_panel_dwg = sw_dwg_pattern.search(all_text)
+    
+    indicator_match = re.search(r"INDICATOR\s*DATA\s*[:\s]*([^\n]+)", all_text, re.IGNORECASE)
+    indicator_text = indicator_match.group(1).strip() if indicator_match else "정보 없음"
     
     aircon_sw = "AIR-CON S/W 적용" in all_text or "에어컨" in all_text
     skip_sw = "OWNER SKIP S/W 적용" in all_text or "오너스킵" in all_text
     
-    c_sw1, c_sw2, c_sw3 = st.columns(3)
-    with c_sw1:
-        # 요청하신 'BOM 필수 확인' 문구 적용
-        if sw_panel_dwg:
-            st.info(f"📄 **S/W PANEL 도면 (BOM 필수 확인)**\n\n{sw_panel_dwg.group(1)}")
-        else:
-            st.info("📄 **S/W PANEL 도면 (BOM 필수 확인)**\n\n정보 없음")
-            
-    with c_sw2:
-        st.info(f"❄️ **에어컨 스위치**\n\n{'적용' if aircon_sw else '미적용'}")
-    with c_sw3:
-        st.info(f"⏭️ **오너 스킵 스위치**\n\n{'적용' if skip_sw else '미적용'}")
+    # 2단 레이아웃으로 배치
+    row1_col1, row1_col2 = st.columns(2)
+    with row1_col1:
+        st.info(f"📄 **S/W PANEL 도면 (BOM 필수 확인)**\n\n{sw_panel_dwg.group(1) if sw_panel_dwg else '정보 없음'}")
+    with row1_col2:
+        st.info(f"📟 **인디케이터 표시 문구 (INDICATOR DATA)**\n\n{indicator_text}")
+
+    row2_col1, row2_col2 = st.columns(2)
+    with row2_col1:
+        st.info(f"❄️ **에어컨 스위치:** {'적용' if aircon_sw else '미적용'}")
+    with row2_col2:
+        st.info(f"⏭️ **오너 스킵 스위치:** {'적용' if skip_sw else '미적용'}")
     
     st.divider()
 
@@ -121,3 +124,4 @@ if uploaded_file:
 
         st.subheader("📦 전체 자재 리스트")
         st.dataframe(df, use_container_width=True, hide_index=True)
+    
