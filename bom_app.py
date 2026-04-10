@@ -10,8 +10,8 @@ st.set_page_config(page_title="엘리베이터 BOM 통합 분석기", layout="wi
 if os.path.exists("logo.png"):
     st.image("logo.png", width=150)
 
-st.title("SMC OPB BOM 통합 분석 시스템")
-st.write("비상통화장치 표시등 및 주요 제작 사양을 자동으로 구분하여 분석합니다.")
+st.title("🏭 엘리베이터 생산 BOM 통합 분석 시스템")
+st.write("중복 데이터 오류를 수정하였으며, 비상통화 표시등 사양을 자동으로 감지합니다.")
 
 uploaded_file = st.file_uploader("분석할 BOM PDF 파일을 선택하세요", type="pdf")
 
@@ -34,8 +34,8 @@ if uploaded_file:
     # 3. 🚨 [최상단] 생산 핵심 주의사항
     st.subheader("⚠️ 생산 핵심 주의사항 (FIRST CHECK)")
     
-    # 비상통화장치 동작 표시등 감지
-    emergency_light = "비상통화장치 동작 표시등" in all_text or "비상통화장치" in all_text
+    # 비상통화장치 동작 표시등 감지 (문래힐스테이트 사양)
+    emergency_light = "비상통화장치 동작 표시등" in all_text
     open_dir_match = re.search(r"열림방향(?:\(MAIN\))?\s*[:\s]*([가-힣A-Z/]+)", all_text)
     open_direction = open_dir_match.group(1) if open_dir_match else "미확인"
     dwgs = re.findall(r"DWG\.?\s*([0-9A-Z]{7,10})", all_text)
@@ -44,9 +44,9 @@ if uploaded_file:
     with col_warn1:
         st.warning(f"🚪 **열림방향(MAIN): {open_direction}**")
         if emergency_light:
-            st.error("🚨 **비상통화장치 동작 표시등 적용 현장 (명판 확인 필수)**")
+            st.error("🚨 **비상통화장치 동작 표시등 적용 현장 (명판 확인 필수)**") [cite: 110]
         if "면취" in all_text:
-            st.error("🔧 **DIS OPB 하부 면취가공 필수 (C0.5)**")
+            st.error("🔧 **DIS OPB 하부 면취가공 필수 (C0.5)**") [cite: 121]
 
     with col_warn2:
         if dwgs:
@@ -60,29 +60,40 @@ if uploaded_file:
     # 4. 📋 핵심 제작 정보 요약
     st.subheader("📋 핵심 제작 사양 요약")
     floor_match = re.search(r"TOTAL\s*FLOOR\s*[:\s]*([^\n]+)", all_text, re.IGNORECASE)
-    total_floor_detail = floor_match.group(1).strip() if floor_match else "미확인"
+    total_floor_detail = floor_match.group(1).strip() if floor_match else "미확인" [cite: 48]
     box_size = re.search(r"BOX\s*[:\s]*([\d\s*xX]+)", all_text)
-    material = "MIRROR" if any(k in all_text for k in ["미러", "MIRROR"]) else "HAIRLINE"
+    material = "MIRROR" if any(k in all_text for k in ["미러", "MIRROR"]) else "HAIRLINE" [cite: 121]
 
     c1, c2, c3 = st.columns(3)
     with c1:
         st.metric("🏢 전체 층수 (TOTAL)", total_floor_detail)
     with c2:
-        st.metric("📏 BOX 규격", box_size.group(1) if box_size else "미확인")
+        st.metric("📏 BOX 규격", box_size.group(1) if box_size else "미확인") [cite: 104, 121]
     with c3:
         st.metric("✨ 표면 사양", f"ST'S {material}")
 
-    # 5. 상세 리스트 (버튼 및 NAME PLATE)
+    # 5. 상세 리스트 분석 (오류 방지 로직 포함)
     if all_tables:
         df_raw = pd.DataFrame(all_tables)
         header_idx = 0
         for i, row in df_raw.iterrows():
             if any(k in str(row.values) for k in ['품명', 'NAME', '사양']):
                 header_idx = i; break
-        df_raw.columns = df_raw.iloc[header_idx]
+        
+        # [핵심] 중복 컬럼 이름 처리 로직
+        cols = list(df_raw.iloc[header_idx])
+        new_cols = []
+        for i, val in enumerate(cols):
+            val = str(val) if val else f"Unknown_{i}"
+            if val in new_cols:
+                new_cols.append(f"{val}_{i}")
+            else:
+                new_cols.append(val)
+        
+        df_raw.columns = new_cols
         df = df_raw.iloc[header_idx+1:].reset_index(drop=True).dropna(axis=1, how='all')
 
-        # --- NAME PLATE 상세 분석 (비상통화등 사양 추가) ---
+        # --- NAME PLATE 상세 분석 ---
         st.markdown("---")
         st.subheader("🏷️ NAME PLATE & 제작 사양")
         
@@ -90,9 +101,8 @@ if uploaded_file:
         name_plate_df = df[name_plate_mask].copy()
 
         if not name_plate_df.empty:
-            # 비상통화장치 표시등 적용 여부를 명판 비고란에 강제 표기
             if emergency_light:
-                st.info("💡 **이 현장의 NAME PLATE에는 '비상통화장치 동작 표시등' 사양이 포함되어야 합니다.**")
+                st.info("💡 **이 현장의 NAME PLATE에는 '비상통화장치 동작 표시등' 사양이 포함되어야 합니다.**") [cite: 110]
             st.table(name_plate_df)
         else:
             st.info("명판 상세 항목을 찾지 못했습니다.")
