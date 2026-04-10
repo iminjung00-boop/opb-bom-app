@@ -11,7 +11,7 @@ if os.path.exists("logo.png"):
     st.image("logo.png", width=150)
 
 st.title("SMC OPB생산 BOM통합 시스템 V 1.0")
-st.write("BOM에 기재된 실무 핵심 사양(BOX 규격, S/W PANEL, 인디케이터)을 분석합니다.")
+st.write("기준층 정보 및 전체 층수 사양을 포함하여 모든 제작 정보를 분석합니다.")
 
 uploaded_file = st.file_uploader("분석할 BOM PDF 파일을 선택하세요", type="pdf")
 
@@ -25,7 +25,7 @@ if uploaded_file:
             if table:
                 all_tables.extend(table)
 
-    # 2. 정보 추출 (공사명, 호기번호)
+    # 2. 정보 추출
     project = re.search(r"공사명\s*[:\s]+([^\n]+)", all_text).group(1).strip() if "공사명" in all_text else "미확인"
     unit = re.search(r"호기번호\s*[:\s]+([A-Z0-9]+)", all_text).group(1).strip() if "호기번호" in all_text else "미확인"
 
@@ -35,13 +35,15 @@ if uploaded_file:
     st.subheader("⚠️ 생산 핵심 주의사항")
     opb_3t = "3t 적용" in all_text or "3T 적용" in all_text
     emergency_light = "비상통화장치 동작 표시등 적용" in all_text
-    open_dir_match = re.search(r"열림방향(?:\(MAIN\))?\s*[:\s]*([가-힣A-Z/]+)", all_text)
-    open_direction = open_dir_match.group(1) if open_dir_match else "미확인"
+    # 기준층 파킹 스위치 정보 추출 (예: 1층 적용)
+    parking_match = re.search(r"기준층\s*버튼\s*PARKING\s*SW\s*적용\s*\(([^)]+)\)", all_text)
+    parking_val = parking_match.group(1) if parking_match else "미적용"
     
     col_warn1, col_warn2 = st.columns(2)
     with col_warn1:
         if opb_3t: st.error("🚨 **비표준 사양: OPB 표판 두께 3t 적용**")
-        st.warning(f"🚪 **열림방향(MAIN): {open_direction}**")
+        if parking_val != "미적용":
+            st.warning(f"🅿️ **기준층 PARKING SW 적용: {parking_val}**")
         if emergency_light: st.error("🚨 **비상통화장치 동작 표시등 적용 현장**")
     with col_warn2:
         if "면취" in all_text: st.error("🔧 **DIS OPB 하부 면취가공 필수 (C0.5)**")
@@ -51,40 +53,37 @@ if uploaded_file:
 
     st.divider()
 
-    # 4. 🎛️ OPB 및 S/W PANEL 상세 제작 사양
-    st.subheader("🎛️ OPB 및 S/W PANEL 상세 제작 사양")
+    # 4. 🎛️ 제작 상세 규격 요약
+    st.subheader("📋 핵심 제작 사양 요약")
+    # 전체 층수 정보 (B2, B1... 형태)
+    floor_match = re.search(r"TOTAL\s*FLOOR\s*([^\n]+)", all_text, re.IGNORECASE)
+    floor_val = floor_match.group(1).split('기준층')[0].strip() if floor_match else "미확인"
     
-    # BOX 규격 추출
-    box_pattern = re.compile(r"BOX\s*[:\s]*([\d\s*xX,]{5,20})", re.IGNORECASE)
-    box_match = box_pattern.search(all_text)
-    box_size_val = box_match.group(1).strip() if box_match else "정보 없음"
+    c_m1, c_m2, c_m3 = st.columns(3)
+    with c_m1:
+        st.metric("🏢 전체 층수 (FLOORS)", floor_val)
+    with c_m2:
+        st.metric("📍 기준층 위치", parking_val)
+    with c_m3:
+        material = "MIRROR" if any(k in all_text for k in ["미러", "MIRROR"]) else "HAIRLINE"
+        st.metric("✨ 표면 사양", f"ST'S {material}")
 
-    # OPB 타입/사양
-    opb_spec_pattern = re.compile(r"([SD]\d{3}[A-Z]?[,.]?\s*\d?DIGIT\.?[,.]?\s*G/S|[SD]\d{3}[A-Z]{1,2})", re.IGNORECASE)
-    opb_spec_search = opb_spec_pattern.search(all_text)
-    opb_type_text = opb_spec_search.group(1).strip() if opb_spec_search else "정보 없음"
-    
-    # S/W PANEL 및 인디케이터 데이터
+    st.divider()
+
+    # 5. 🎛️ OPB 상세 제작 사양
+    st.subheader("🎛️ OPB 및 S/W PANEL 상세 사양")
+    box_match = re.search(r"BOX\s*[:\s]*([\d\s*xX,]{5,20})", all_text, re.IGNORECASE)
     sw_dwg = re.search(r"S/W\s*PANEL.*?DWG\s*NO\.?\s*[:\s]*([0-9A-Z]+)", all_text, re.IGNORECASE | re.DOTALL)
     indicator_data = re.search(r"INDICATOR\s*DATA\s*[:\s]*([^\n]+)", all_text, re.IGNORECASE)
 
     c1, c2, c3 = st.columns(3)
-    with c1: st.info(f"✨ **OPB 타입/사양**\n\n{opb_type_text}")
-    with c2: st.info(f"📏 **MAIN BOX size**\n\n{box_size_val}")
-    with c3: st.info(f"📄 **S/W PANEL 도면**\n\n{sw_dwg.group(1) if sw_dwg else '정보 없음'}")
-
-    r2_c1, r2_c2, r2_c3 = st.columns(3)
-    with r2_c1: st.info(f"📟 **인디케이터 표시 문구**\n\n{indicator_data.group(1).strip() if indicator_data else '정보 없음'}")
-    with r2_c2:
-        aircon_sw = "AIR-CON S/W 적용" in all_text or "에어컨" in all_text
-        st.info(f"❄️ **에어컨 스위치:** {'적용' if aircon_sw else '미적용'}")
-    with r2_c3:
-        skip_sw = "OWNER SKIP S/W 적용" in all_text or "오너스킵" in all_text
-        st.info(f"⏭️ **오너 스킵 스위치:** {'적용' if skip_sw else '미적용'}")
+    with c1: st.info(f"📏 **MAIN BOX size**\n\n{box_match.group(1).strip() if box_match else '정보 없음'}")
+    with c2: st.info(f"📄 **S/W PANEL 도면**\n\n{sw_dwg.group(1) if sw_dwg else '정보 없음'}")
+    with c3: st.info(f"📟 **인디케이터 문구**\n\n{indicator_data.group(1).strip() if indicator_data else '정보 없음'}")
 
     st.divider()
 
-    # 5. 자재 리스트 분석
+    # 6. 자재 리스트 분석
     if all_tables:
         df_raw = pd.DataFrame(all_tables)
         header_idx = 0
