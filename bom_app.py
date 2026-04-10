@@ -25,7 +25,7 @@ if uploaded_file:
             if table:
                 all_tables.extend(table)
 
-    # 2. 정보 추출 (공사명, 호기번호)
+    # 2. 정보 추출
     project = re.search(r"공사명\s*[:\s]+([^\n]+)", all_text).group(1).strip() if "공사명" in all_text else "미확인"
     unit = re.search(r"호기번호\s*[:\s]+([A-Z0-9]+)", all_text).group(1).strip() if "호기번호" in all_text else "미확인"
 
@@ -63,16 +63,20 @@ if uploaded_file:
     # ---------------------------------------------------------
     st.subheader("🎛️ OPB 및 S/W PANEL 상세 제작 사양")
     
-    # [핵심] MAIN BOX size 추출
+    # [핵심 수정] PCB 설정 (IND:X SD:O 등) 추출 로직 강화
+    # IND와 SD 사이의 모든 문자(공백, 점 등)를 무시하고 G/S 전까지 모두 가져옵니다.
+    pcb_pattern = re.search(r"IN[D|V]:?([^\s,.]+)[.\s]*SD:?([^\s,.]+)", all_text, re.IGNORECASE)
+    if pcb_pattern:
+        pcb_setting_val = f"IND:{pcb_pattern.group(1)}  SD:{pcb_pattern.group(2)}"
+    else:
+        # 패턴이 없을 경우 차선책으로 주변 텍스트 추출
+        fallback = re.search(r"IN[D|V]:?[^,\n]+G/S", all_text, re.IGNORECASE)
+        pcb_setting_val = fallback.group(0).strip() if fallback else "정보 없음"
+
     box_pattern = re.compile(r"BOX\s*[:\s]*([\d\s*xX,]{5,20})", re.IGNORECASE)
     box_match = box_pattern.search(all_text)
     box_size_val = box_match.group(1).strip() if box_match else "정보 없음"
 
-    # [핵심] PCB 설정 (IND/SD) 추출
-    pcb_pattern = re.search(r"MAIN.*?OPB.*?(IN[D|V]:?[^,\n]+)", all_text, re.IGNORECASE)
-    pcb_setting_val = pcb_pattern.group(1).strip() if pcb_pattern else "정보 없음"
-
-    # S521A 등 사양 추출
     opb_spec_pattern = re.compile(r"([SD]\d{3}[A-Z]?[,.]?\s*\d?DIGIT\.?[,.]?\s*G/S|[SD]\d{3}[A-Z]{1,2})", re.IGNORECASE)
     opb_spec_search = opb_spec_pattern.search(all_text)
     opb_type_text = opb_spec_search.group(1).strip() if opb_spec_search else "정보 없음"
@@ -83,16 +87,15 @@ if uploaded_file:
     indicator_match = re.search(r"INDICATOR\s*DATA\s*[:\s]*([^\n]+)", all_text, re.IGNORECASE)
     indicator_text = indicator_match.group(1).strip() if indicator_match else "정보 없음"
     
-    # 1층 레이아웃 배치
     r1_c1, r1_c2, r1_c3 = st.columns(3)
     with r1_c1:
-        st.info(f"✨ **OPB 타입/사양 (INDICATOR)**\n\n{opb_type_text}")
+        st.info(f"✨ **OPB 타입/사양**\n\n{opb_type_text}")
     with r1_c2:
         st.info(f"📏 **MAIN BOX size**\n\n{box_size_val}")
     with r1_c3:
+        # 이제 IND:X SD:O 형태로 정확히 표시됩니다.
         st.success(f"🧩 **PCB 설정 (IND/SD)**\n\n{pcb_setting_val}")
 
-    # 2층 레이아웃 배치
     r2_c1, r2_c2, r2_c3 = st.columns(3)
     with r2_c1:
         st.info(f"📄 **S/W PANEL 도면 (BOM 확인)**\n\n{sw_panel_dwg.group(1) if sw_panel_dwg else '정보 없음'}")
@@ -105,7 +108,7 @@ if uploaded_file:
     
     st.divider()
 
-    # 5. 자재 리스트 분석
+    # 5. 자재 리스트
     if all_tables:
         df_raw = pd.DataFrame(all_tables)
         header_idx = 0
@@ -124,6 +127,3 @@ if uploaded_file:
         st.subheader("🔘 버튼 및 주요 자재 투입 명세")
         target_mask = df.astype(str).apply(lambda x: x.str.contains('BUTTON|버튼|HIP|PCB|BOARD|IOA', case=False, na=False)).any(axis=1)
         st.table(df[target_mask])
-
-        st.subheader("📦 전체 자재 리스트")
-        st.dataframe(df, use_container_width=True, hide_index=True)
