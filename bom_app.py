@@ -5,7 +5,7 @@ import re
 import os
 
 # 1. 페이지 설정 (웹 브라우저 탭 제목)
-st.set_page_config(page_title="SMC OPB생산 BOM통합 시스템", layout="wide")
+st.set_page_config(page_title="SMC OPB생산 BOM통합 시스템 V1.0", layout="wide")
 
 if os.path.exists("logo.png"):
     st.image("logo.png", width=150)
