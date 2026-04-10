@@ -11,7 +11,7 @@ if os.path.exists("logo.png"):
     st.image("logo.png", width=150)
 
 st.title("SMC OPB생산 BOM통합 시스템 V 1.0")
-st.write("BOM에 기재된 현장별 BOX 규격을 정밀하게 분석하여 표시합니다.")
+st.write("BOM에 기재된 실제 BOX 규격을 실시간으로 추출하여 표시합니다.")
 
 uploaded_file = st.file_uploader("분석할 BOM PDF 파일을 선택하세요", type="pdf")
 
@@ -59,20 +59,20 @@ if uploaded_file:
     st.divider()
 
     # ---------------------------------------------------------
-    # 4. 🎛️ OPB 및 S/W PANEL 상세 제작 사양 (BOX 규격 추출)
+    # 4. 🎛️ OPB 및 S/W PANEL 상세 제작 사양
     # ---------------------------------------------------------
     st.subheader("🎛️ OPB 및 S/W PANEL 상세 제작 사양")
     
-    # [핵심] BOM 텍스트에서 'BOX:' 뒤에 오는 규격을 정확히 찾아냅니다.
-    # 예: BOX: 164 x 1704 또는 BOX SIZE: 164 * 1704 등 대응
-    box_pattern = re.compile(r"BOX\s*(?:SIZE)?\s*[:\s]*([\d\s*xX,\[\]WBH]+)", re.IGNORECASE)
+    # [핵심 수정] 이미지 사양(BOX: 164 x 1704)을 정확히 추출하는 정규식
+    # 숫자, x, X, *, 공백, 콤마 등을 모두 포함하여 규격 전체를 가져옵니다.
+    box_pattern = re.compile(r"BOX\s*[:\s]*([\d\s*xX,]{5,20})", re.IGNORECASE)
     box_match = box_pattern.search(all_text)
-    # 불필요한 공백이나 줄바꿈을 제거하여 규격만 추출
-    box_size_val = box_match.group(1).strip().replace("\n", "") if box_match else "정보 없음"
+    box_size_val = box_match.group(1).strip() if box_match else "정보 없음"
 
+    # S521A 등 사양 추출
     opb_spec_pattern = re.compile(r"([SD]\d{3}[A-Z]?[,.]?\s*\d?DIGIT\.?[,.]?\s*G/S|[SD]\d{3}[A-Z]{1,2})", re.IGNORECASE)
     opb_spec_search = opb_spec_pattern.search(all_text)
-    opb_type_text = opb_spec_search.group(1).replace("\n", " ").strip() if opb_spec_search else "정보 없음"
+    opb_type_text = opb_spec_search.group(1).strip() if opb_spec_search else "정보 없음"
     
     sw_dwg_pattern = re.compile(r"S/W\s*PANEL.*?DWG\s*NO\.?\s*[:\s]*([0-9A-Z]+)", re.IGNORECASE | re.DOTALL)
     sw_panel_dwg = sw_dwg_pattern.search(all_text)
@@ -80,12 +80,12 @@ if uploaded_file:
     indicator_match = re.search(r"INDICATOR\s*DATA\s*[:\s]*([^\n]+)", all_text, re.IGNORECASE)
     indicator_text = indicator_match.group(1).strip() if indicator_match else "정보 없음"
     
-    # 상세 사양 레이아웃
+    # 레이아웃 배치
     r1_c1, r1_c2, r1_c3 = st.columns(3)
     with r1_c1:
         st.info(f"✨ **OPB 타입/사양 (INDICATOR)**\n\n{opb_type_text}")
     with r1_c2:
-        # 이 부분에 BOM에 적힌 BOX 규격이 나타납니다.
+        # 여기에 164 x 1704 와 같은 값이 들어갑니다.
         st.info(f"📏 **MAIN BOX size**\n\n{box_size_val}")
     with r1_c3:
         st.info(f"📄 **S/W PANEL 도면 (BOM 필수 확인)**\n\n{sw_panel_dwg.group(1) if sw_panel_dwg else '정보 없음'}")
@@ -111,7 +111,6 @@ if uploaded_file:
     with c_m1:
         st.metric("🏢 전체 층수 (TOTAL)", floor_match.group(1).strip() if floor_match else "미확인")
     with c_m2:
-        # 요약 대시보드에서도 BOX 규격 확인 가능
         st.metric("📏 MAIN BOX size (확인)", box_size_val)
     with c_m3:
         st.metric("✨ 표면 사양", f"ST'S {material}")
