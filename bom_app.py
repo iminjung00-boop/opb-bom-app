@@ -5,13 +5,13 @@ import re
 import os
 
 # 1. 페이지 설정 (웹 브라우저 탭 제목)
-st.set_page_config(page_title="SMC OPB생산 BOM통합 시스템 V1.0", layout="wide")
+st.set_page_config(page_title="SMC OPB생산 BOM통합 시스템 V 1.0", layout="wide")
 
 if os.path.exists("logo.png"):
     st.image("logo.png", width=150)
 
-# 메인 제목에서 공장 아이콘 제거
-st.title("SMC OPB생산 BOM통합 시스템")
+# 메인 제목 뒤에 V 1.0 추가
+st.title("SMC OPB생산 BOM통합 시스템 V 1.0")
 st.write("OPB 생산에 특화된 비표준 사양 감지 및 자재 명세 분석 시스템입니다.")
 
 uploaded_file = st.file_uploader("분석할 BOM PDF 파일을 선택하세요", type="pdf")
@@ -97,7 +97,7 @@ if uploaded_file:
         else:
             st.success("✅ **비상통화장치 동작 표시등: 미적용**")
 
-    # 6. 자재 리스트 분석 (중복 컬럼 에러 방지 포함)
+    # 6. 자재 리스트 분석
     if all_tables:
         df_raw = pd.DataFrame(all_tables)
         header_idx = 0
