@@ -11,7 +11,7 @@ if os.path.exists("logo.png"):
     st.image("logo.png", width=150)
 
 st.title("SMC OPB생산 BOM통합 시스템 V 1.0")
-st.write("S/W PANEL 및 비표준 두께(3t) 등 정밀 제작 사양을 분석합니다.")
+st.write("S/W PANEL 및 비표준 사양을 정밀 분석합니다.")
 
 uploaded_file = st.file_uploader("분석할 BOM PDF 파일을 선택하세요", type="pdf")
 
@@ -58,47 +58,45 @@ if uploaded_file:
 
     st.divider()
 
-    # 4. 📋 S/W PANEL 상세 사양 (요청 기능)
+    # ---------------------------------------------------------
+    # 4. 🎛️ S/W PANEL 상세 사양 (도면 번호 추출 강화)
+    # ---------------------------------------------------------
     st.subheader("🎛️ S/W PANEL 상세 사양")
     
-    # S/W PANEL 관련 텍스트 추출
-    sw_panel_dwg = re.search(r"S/W\s*PANEL\s*[:\s]*DWG\s*NO\.?\s*([0-9A-Z]+)", all_text, re.IGNORECASE)
+    # [수정] S/W PANEL 뒤에 나오는 DWG NO. 이후의 모든 문자와 숫자를 더 정밀하게 찾습니다.
+    # 줄바꿈(\n)이나 공백이 있어도 무시하고 번호만 가져오도록 보강
+    sw_dwg_pattern = re.compile(r"S/W\s*PANEL.*?DWG\s*NO\.?\s*([0-9A-Z]+)", re.IGNORECASE | re.DOTALL)
+    sw_panel_dwg = sw_dwg_pattern.search(all_text)
+    
     aircon_sw = "AIR-CON S/W 적용" in all_text or "에어컨" in all_text
     skip_sw = "OWNER SKIP S/W 적용" in all_text or "오너스킵" in all_text
-    att_sw = "ATT" in all_text
     
     c_sw1, c_sw2, c_sw3 = st.columns(3)
     with c_sw1:
+        # 추출된 번호가 있으면 표시, 없으면 '정보 없음'
         st.info(f"📄 **S/W PANEL 도면**\n\n{sw_panel_dwg.group(1) if sw_panel_dwg else '정보 없음'}")
     with c_sw2:
         st.info(f"❄️ **에어컨 스위치**\n\n{'적용' if aircon_sw else '미적용'}")
     with c_sw3:
         st.info(f"⏭️ **오너 스킵 스위치**\n\n{'적용' if skip_sw else '미적용'}")
     
-    if att_sw:
-        st.caption("※ 서비스 사양(ATT) 스위치 적용 여부 확인 필요")
-
     st.divider()
 
-    # 5. 핵심 제작 정보 요약 및 NAME PLATE
-    st.subheader("📋 핵심 제작 사양 및 명표")
+    # 5. 핵심 제작 정보 요약 (층수/규격 등)
+    st.subheader("📋 핵심 제작 사양 요약")
     floor_match = re.search(r"TOTAL\s*FLOOR\s*[:\s]*([^\n]+)", all_text, re.IGNORECASE)
     box_size = re.search(r"BOX\s*[:\s]*([\d\s*xX]+)", all_text)
-    
-    col_np1, col_np2 = st.columns(2)
-    with col_np1:
-        st.metric("🏢 전체 층수", floor_match.group(1).strip() if floor_match else "미확인")
-        st.metric("📏 BOX 규격", box_size.group(1) if box_size else "미확인")
-    
-    with col_np2:
-        person_match = re.search(r"인승\s*[:\s]*([\d]+)\s*인승", all_text)
-        weight_match = re.search(r"용량\s*[:\s]*([\d]+)\s*kg", all_text)
-        st.write(f"👥 **인승/용량:** {person_match.group(0) if person_match else '미확인'} / {weight_match.group(0) if weight_match else ''}")
-        st.write(f"📢 **음성 안내:** {'적용' if 'VOICE' in all_text else '미적용'}")
-        if opb_3t:
-            st.warning("📏 **표판 두께:** 3t 적용 (특수)")
+    material = "MIRROR" if any(k in all_text for k in ["미러", "MIRROR"]) else "HAIRLINE"
 
-    # 6. 자재 리스트 분석
+    c_m1, c_m2, c_m3 = st.columns(3)
+    with c_m1:
+        st.metric("🏢 전체 층수 (TOTAL)", floor_match.group(1).strip() if floor_match else "미확인")
+    with c_m2:
+        st.metric("📏 BOX 규격", box_size.group(1) if box_size else "미확인")
+    with c_m3:
+        st.metric("✨ 표면 사양", f"ST'S {material}")
+
+    # 6. 버튼 및 전체 리스트
     if all_tables:
         df_raw = pd.DataFrame(all_tables)
         header_idx = 0
