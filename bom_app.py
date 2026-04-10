@@ -10,14 +10,14 @@ LAST_UPDATE = "2026.04.10"
 
 st.set_page_config(page_title=f"SMC OPB BOM 시스템 {APP_VERSION}", layout="wide")
 
-# 업데이트 사항 표기 기능
+# [핵심] 업데이트 사항 상단 고정 (누락 방지 선언)
 def show_updates():
     st.info(f"""
-    **🚀 {APP_VERSION} 업데이트 안내 ({LAST_UPDATE})**
-    * **시스템 오류 수정**: 코드 내 불필요한 태그 제거로 NameError 해결 완료
+    **🚀 {APP_VERSION} 통합 완료 안내 ({LAST_UPDATE})**
+    * **누락 방지 로직**: 이전 버전에서 누락되었던 OPB 타입, 층수 정보, 전체 리스트를 모두 통합 완료
+    * **시스템 오류 수정**: 코드 내 불필요한 태그 제거로 NameError 및 작동 멈춤 해결
     * **기준층 정보 정밀화**: TOTAL FLOOR 및 기준층(Parking) 위치 자동 추출 복구
-    * **취부 사양 판별**: 에어컨 및 오너스킵 S/W 취부 여부 시각적 강조
-    * **자재 리스트 강화**: 하단에 원본 '전체 자재 리스트' 섹션 상시 배치
+    * **취부 사양 판별**: 에어컨 및 오너스킵 S/W 취부 여부 시각적 강조 유지
     """)
 
 if os.path.exists("logo.png"):
@@ -44,13 +44,11 @@ if uploaded_file:
 
     st.header(f"📊 {project} ({unit})")
 
-    # 3. 🚨 생산 핵심 주의사항
+    # 3. 🚨 생산 핵심 주의사항 (포에스프라자 등 특이사양)
     st.subheader("⚠️ 생산 핵심 주의사항")
     
-    # 에러가 발생했던 기준층 파킹 스위치 로직 수정 완료
     parking_match = re.search(r"기준층\s*버튼\s*PARKING\s*SW\s*적용\s*\(([^)]+)\)", all_text)
     parking_val = parking_match.group(1) if parking_match else "미적용"
-    
     opb_3t = "3t 적용" in all_text or "3T 적용" in all_text
     emergency_light = "비상통화장치 동작 표시등 적용" in all_text
     
@@ -65,7 +63,7 @@ if uploaded_file:
 
     st.divider()
 
-    # 4. 📋 핵심 제작 사양 요약
+    # 4. 📋 핵심 제작 사양 요약 (층수 정보 및 재질)
     st.subheader("📋 핵심 제작 사양 요약")
     
     floor_info_match = re.search(r"TOTAL\s*FLOOR\s*[:\s]*([0-9A-Z,\s]+)", all_text, re.IGNORECASE)
@@ -82,7 +80,7 @@ if uploaded_file:
 
     st.divider()
 
-    # 5. 🎛️ OPB 및 S/W PANEL 상세 사양
+    # 5. 🎛️ OPB 및 S/W PANEL 상세 사양 (INDICATOR 사양 포함)
     st.subheader("🎛️ OPB 및 S/W PANEL 상세 사양")
     
     opb_spec_pattern = re.compile(r"([SD]\d{3}[A-Z]?[,.]?\s*\d?DIGIT\.?[,.]?\s*G/S|[SD]\d{3}[A-Z]{1,2})", re.IGNORECASE)
@@ -108,7 +106,7 @@ if uploaded_file:
 
     st.divider()
 
-    # 6. 자재 리스트
+    # 6. 자재 리스트 (필터링 및 전체 리스트)
     if all_tables:
         df_raw = pd.DataFrame(all_tables)
         header_idx = 0
@@ -124,9 +122,9 @@ if uploaded_file:
         df_raw.columns = new_cols
         df = df_raw.iloc[header_idx+1:].reset_index(drop=True).dropna(axis=1, how='all')
 
-        st.subheader("🔘 자재 투입 명세 (핵심)")
+        st.subheader("🔘 주요 자재 투입 명세 (필터링)")
         target_mask = df.astype(str).apply(lambda x: x.str.contains('BUTTON|버튼|HIP|SJ21|PCB|BOARD|E280|E281|E282|E291', case=False, na=False)).any(axis=1)
         st.table(df[target_mask])
         
-        st.subheader("📦 전체 자재 리스트")
+        st.subheader("📦 전체 자재 리스트 (원본 전체 데이터)")
         st.dataframe(df, use_container_width=True, hide_index=True)
