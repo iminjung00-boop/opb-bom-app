@@ -11,7 +11,7 @@ if os.path.exists("logo.png"):
     st.image("logo.png", width=150)
 
 st.title("🏭 엘리베이터 생산 BOM 통합 분석 시스템")
-st.write("비상통화장치 표시등 적용 유무를 중점적으로 분석합니다.")
+st.write("비상통화장치 유무를 포함한 모든 명판(NAME PLATE) 상세 사양을 통합 분석합니다.")
 
 uploaded_file = st.file_uploader("분석할 BOM PDF 파일을 선택하세요", type="pdf")
 
@@ -25,7 +25,7 @@ if uploaded_file:
             if table:
                 all_tables.extend(table)
 
-    # 2. 정보 추출
+    # 2. 공사 정보 추출
     project = re.search(r"공사명\s*[:\s]+([^\n]+)", all_text).group(1).strip() if "공사명" in all_text else "미확인"
     unit = re.search(r"호기번호\s*[:\s]+([A-Z0-9]+)", all_text).group(1).strip() if "호기번호" in all_text else "미확인"
 
@@ -34,8 +34,9 @@ if uploaded_file:
     # 3. 🚨 [최상단] 생산 핵심 주의사항
     st.subheader("⚠️ 생산 핵심 주의사항 (FIRST CHECK)")
     
-    # 비상통화장치 동작 표시등 감지 로직
-    emergency_light_applied = "비상통화장치 동작 표시등 적용" in all_text
+    # 주요 키워드 감지
+    emergency_light = "비상통화장치 동작 표시등 적용" in all_text
+    fireman_sw = "FIREMAN STICKER: YES" in all_text or "비상용" in all_text
     open_dir_match = re.search(r"열림방향(?:\(MAIN\))?\s*[:\s]*([가-힣A-Z/]+)", all_text)
     open_direction = open_dir_match.group(1) if open_dir_match else "미확인"
     dwgs = re.findall(r"DWG\.?\s*([0-9A-Z]{7,10})", all_text)
@@ -43,10 +44,10 @@ if uploaded_file:
     col_warn1, col_warn2 = st.columns(2)
     with col_warn1:
         st.warning(f"🚪 **열림방향(MAIN): {open_direction}**")
-        if "면취" in all_text:
-            st.error("🔧 **DIS OPB 하부 면취가공 필수 (C0.5)**")
-        if "벨버튼" in all_text:
-            st.warning("🔘 **벨버튼 위치 확인 필요**")
+        if emergency_light:
+            st.error("🚨 **비상통화장치 동작 표시등 적용 현장**")
+        if fireman_sw:
+            st.error("🔥 **비상용 엘리베이터 (FIREMAN STICKER 적용)**")
 
     with col_warn2:
         if dwgs:
@@ -72,17 +73,34 @@ if uploaded_file:
     with c3:
         st.metric("✨ 표면 사양", f"ST'S {material}")
 
-    # 5. [요청 사항] NAME PLATE 상세 정보 (비상통화장치 유무만)
+    # 5. [강화된 섹션] NAME PLATE 상세 사양 통합
     st.markdown("---")
-    st.subheader("🏷️ NAME PLATE 상세 정보")
+    st.subheader("🏷️ NAME PLATE 상세 제작 사양")
     
-    if emergency_light_applied:
-        st.error("🚨 **비상통화장치 동작 표시등: 적용**")
-        st.info("※ 명판 제작 시 동작 표시등 공간 및 문구를 반드시 확인하세요.")
-    else:
-        st.success("✅ **비상통화장치 동작 표시등: 미적용 (해당 없음)**")
+    # 텍스트에서 명판 관련 세부 정보 추출
+    person_match = re.search(r"인승\s*[:\s]*([\d]+)\s*인승", all_text)
+    weight_match = re.search(r"용량\s*[:\s]*([\d]+)\s*kg", all_text)
+    voice_match = "VOICE SYNTHESIZER" in all_text or "음성안내" in all_text
+    
+    col_np1, col_np2 = st.columns(2)
+    
+    with col_np1:
+        st.write(f"👥 **인승/용량:** {person_match.group(0) if person_match else '정보 없음'} / {weight_match.group(0) if weight_match else ''}")
+        st.write(f"📢 **음성 안내:** {'적용 (한국어)' if voice_match else '미적용'}")
+        st.write(f"🔥 **비상용 스티커:** {'YES (FIREMAN)' if fireman_sw else 'NO'}")
 
-    # 6. 버튼 및 전체 리스트 (참고용 하단 배치)
+    with col_np2:
+        # 비상통화장치 유무 강조
+        if emergency_light:
+            st.error("🚨 **비상통화장치 동작 표시등: 적용**")
+        else:
+            st.success("✅ **비상통화장치 동작 표시등: 미적용**")
+        
+        # 비상통화장치 종류 표시
+        intercom_match = re.search(r"비상통화장치\s*[:\s]*([^\n]+)", all_text)
+        st.write(f"📞 **통화장치 종류:** {intercom_match.group(1) if intercom_match else '정보 없음'}")
+
+    # 6. 버튼 및 전체 리스트 (하단 배치)
     if all_tables:
         df_raw = pd.DataFrame(all_tables)
         header_idx = 0
@@ -90,7 +108,6 @@ if uploaded_file:
             if any(k in str(row.values) for k in ['품명', 'NAME', '사양']):
                 header_idx = i; break
         
-        # 중복 컬럼 처리
         cols = list(df_raw.iloc[header_idx])
         new_cols = []
         for i, val in enumerate(cols):
