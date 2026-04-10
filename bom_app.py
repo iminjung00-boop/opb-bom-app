@@ -11,7 +11,7 @@ if os.path.exists("logo.png"):
     st.image("logo.png", width=150)
 
 st.title("SMC OPB생산 BOM통합 시스템 V 1.0")
-st.write("PCB 설정(IND/SD) 인식 로직을 강화하여 누락 없는 분석을 지원합니다.")
+st.write("PCB 취부 사양(IND/SD) 및 BOX 규격을 실시간으로 분석합니다.")
 
 uploaded_file = st.file_uploader("분석할 BOM PDF 파일을 선택하세요", type="pdf")
 
@@ -32,86 +32,71 @@ if uploaded_file:
     st.header(f"📊 {project} ({unit})")
 
     # 3. 🚨 [최상단] 생산 핵심 주의사항
-    st.subheader("⚠️ 생산 핵심 주의사항 (비표준 사양 감지)")
+    st.subheader("⚠️ 생산 핵심 주의사항 (FIRST CHECK)")
     
     opb_3t = "3t 적용" in all_text or "3T 적용" in all_text
     emergency_light = "비상통화장치 동작 표시등 적용" in all_text
-    open_dir_match = re.search(r"열림방향(?:\(MAIN\))?\s*[:\s]*([가-힣A-Z/]+)", all_text)
-    open_direction = open_dir_match.group(1) if open_dir_match else "미확인"
     
     col_warn1, col_warn2 = st.columns(2)
     with col_warn1:
         if opb_3t:
             st.error("🚨 **비표준 사양: OPB 표판 두께 3t 적용 (제작 주의)**")
-        st.warning(f"🚪 **열림방향(MAIN): {open_direction}**")
         if emergency_light:
             st.error("🚨 **비상통화장치 동작 표시등 적용 현장**")
-
     with col_warn2:
         if "면취" in all_text:
             st.error("🔧 **DIS OPB 하부 면취가공 필수 (C0.5)**")
-        dwgs = re.findall(r"DWG\.?\s*([0-9A-Z]{7,10})", all_text)
-        if dwgs:
-            for d in set(dwgs): st.error(f"🚨 **비표준 도면 확인 필수: {d}**")
-        else:
-            st.success("✅ **표준 도면 사양 (특이사항 없음)**")
 
     st.divider()
 
     # ---------------------------------------------------------
-    # 4. 🎛️ OPB 및 S/W PANEL 상세 제작 사양 (로직 대폭 보강)
+    # 4. 🧩 PCB 취부 상세 사양 (IND / SD 판별)
     # ---------------------------------------------------------
+    st.subheader("🧩 PCB 취부 상세 사양 (IND / SD)")
+    
+    # IND, SD 값 추출 (X, O, 0 등 대응)
+    ind_match = re.search(r"IND\s*[:\s]*([XO0])", all_text, re.IGNORECASE)
+    sd_match = re.search(r"SD\s*[:\s]*([XO0])", all_text, re.IGNORECASE)
+    
+    ind_val = ind_match.group(1).upper() if ind_match else "미확인"
+    sd_val = sd_match.group(1).upper() if sd_match else "미확인"
+
+    # 취부 여부 메시지 생성
+    def get_status(val):
+        if val in ['O', '0']: return "✅ 취부 필수"
+        if val == 'X': return "❌ 취부 제외 (삭제)"
+        return "❓ 확인 필요"
+
+    c_ind, c_sd = st.columns(2)
+    with c_ind:
+        st.metric(label="📟 인디케이터 (IND)", value=ind_val, delta=get_status(ind_val), delta_color="normal")
+    with c_sd:
+        st.metric(label="🔢 세그먼트 (SD)", value=sd_val, delta=get_status(sd_val), delta_color="normal")
+
+    st.divider()
+
+    # 5. 🎛️ OPB 및 S/W PANEL 상세 제작 사양
     st.subheader("🎛️ OPB 및 S/W PANEL 상세 제작 사양")
     
-    # [무조건 추출 로직] IND와 SD 값을 텍스트 전역에서 개별적으로라도 찾아냅니다.
-    ind_val = re.search(r"IND\s*[:\s]*([A-Z0-9]+)", all_text, re.IGNORECASE)
-    sd_val = re.search(r"SD\s*[:\s]*([A-Z0-9]+)", all_text, re.IGNORECASE)
-    
-    if ind_val and sd_val:
-        pcb_setting_val = f"IND:{ind_val.group(1)} / SD:{sd_val.group(1)}"
-    elif ind_val:
-        pcb_setting_val = f"IND:{ind_val.group(1)} (SD 미확인)"
-    else:
-        # 통합 패턴 재시도 (문래힐스테이트 형식)
-        fallback = re.search(r"I[N|V]D[:\s]*([^\s.]+)[.\s]*SD[:\s]*([^\s.]+)", all_text, re.IGNORECASE)
-        pcb_setting_val = f"IND:{fallback.group(1)} SD:{fallback.group(2)}" if fallback else "정보 없음"
-
     box_pattern = re.compile(r"BOX\s*[:\s]*([\d\s*xX,]{5,20})", re.IGNORECASE)
     box_match = box_pattern.search(all_text)
     box_size_val = box_match.group(1).strip() if box_match else "정보 없음"
 
-    opb_spec_pattern = re.compile(r"([SD]\d{3}[A-Z]?[,.]?\s*\d?DIGIT\.?[,.]?\s*G/S|[SD]\d{3}[A-Z]{1,2})", re.IGNORECASE)
-    opb_spec_search = opb_spec_pattern.search(all_text)
-    opb_type_text = opb_spec_search.group(1).strip() if opb_spec_search else "정보 없음"
-    
     sw_dwg_pattern = re.compile(r"S/W\s*PANEL.*?DWG\s*NO\.?\s*[:\s]*([0-9A-Z]+)", re.IGNORECASE | re.DOTALL)
     sw_panel_dwg = sw_dwg_pattern.search(all_text)
     
-    indicator_match = re.search(r"INDICATOR\s*DATA\s*[:\s]*([^\n]+)", all_text, re.IGNORECASE)
-    indicator_text = indicator_match.group(1).strip() if indicator_match else "정보 없음"
-    
     r1_c1, r1_c2, r1_c3 = st.columns(3)
     with r1_c1:
-        st.info(f"✨ **OPB 타입/사양**\n\n{opb_type_text}")
-    with r1_c2:
         st.info(f"📏 **MAIN BOX size**\n\n{box_size_val}")
+    with r1_c2:
+        st.info(f"📄 **S/W PANEL 도면**\n\n{sw_panel_dwg.group(1) if sw_panel_dwg else '정보 없음'}")
     with r1_c3:
-        # 보강된 PCB 설정값 출력
-        st.success(f"🧩 **PCB 설정 (IND/SD)**\n\n{pcb_setting_val}")
+        indicator_match = re.search(r"INDICATOR\s*DATA\s*[:\s]*([^\n]+)", all_text, re.IGNORECASE)
+        st.info(f"📟 **인디케이터 문구**\n\n{indicator_match.group(1).strip() if indicator_match else '정보 없음'}")
 
-    r2_c1, r2_c2, r2_c3 = st.columns(3)
-    with r2_c1:
-        st.info(f"📄 **S/W PANEL 도면 (BOM 확인)**\n\n{sw_panel_dwg.group(1) if sw_panel_dwg else '정보 없음'}")
-    with r2_c2:
-        st.info(f"📟 **인디케이터 표시 문구**\n\n{indicator_text}")
-    with r2_c3:
-        aircon_sw = "AIR-CON S/W 적용" in all_text or "에어컨" in all_text
-        skip_sw = "OWNER SKIP S/W 적용" in all_text or "오너스킵" in all_text
-        st.info(f"⚙️ **기타 옵션**\n\n에어컨: {'적용' if aircon_sw else '미적용'} / 오너스킵: {'적용' if skip_sw else '미적용'}")
-    
     st.divider()
 
-    # 5. 자재 리스트
+    # 6. 자재 리스트
     if all_tables:
         df_raw = pd.DataFrame(all_tables)
         header_idx = 0
