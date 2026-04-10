@@ -11,7 +11,7 @@ if os.path.exists("logo.png"):
     st.image("logo.png", width=150)
 
 st.title("SMC OPB생산 BOM통합 시스템 V 1.0")
-st.write("S521A 등 OPB 상세 사양, S/W PANEL 및 인디케이터 문구를 정밀 분석합니다.")
+st.write("OPB 상세 사양(S521A 등) 및 S/W PANEL 제작 정보를 정밀 분석합니다.")
 
 uploaded_file = st.file_uploader("분석할 BOM PDF 파일을 선택하세요", type="pdf")
 
@@ -59,13 +59,15 @@ if uploaded_file:
     st.divider()
 
     # ---------------------------------------------------------
-    # 4. 🎛️ OPB 상세 사양 (S521A, 인디케이터, S/W PANEL)
+    # 4. 🎛️ OPB 상세 사양 (S521A, 2DIGIT 등 추출 강화)
     # ---------------------------------------------------------
     st.subheader("🎛️ OPB 및 S/W PANEL 상세 제작 사양")
     
-    # OPB 타입 및 상세 사양 추출 (S521A, 2DIGIT 등)
-    opb_spec_match = re.search(r"([SD]\d{3}[A-Z]?,?\s*\d?DIGIT\.?G/S)", all_text, re.IGNORECASE)
-    opb_type_text = opb_spec_match.group(1) if opb_spec_match else "정보 없음"
+    # [수정된 로직] S521A, D521AG 등 다양한 사양 형식을 꼼꼼하게 찾습니다.
+    # 쉼표나 점(.)이 섞인 경우까지 모두 포함합니다.
+    opb_spec_pattern = re.compile(r"([SD]\d{3}[A-Z]?[,.]?\s*\d?DIGIT\.?[,.]?\s*G/S|[SD]\d{3}[A-Z]{1,2})", re.IGNORECASE)
+    opb_spec_search = opb_spec_pattern.search(all_text)
+    opb_type_text = opb_spec_search.group(1).replace("\n", " ").strip() if opb_spec_search else "정보 없음"
     
     sw_dwg_pattern = re.compile(r"S/W\s*PANEL.*?DWG\s*NO\.?\s*[:\s]*([0-9A-Z]+)", re.IGNORECASE | re.DOTALL)
     sw_panel_dwg = sw_dwg_pattern.search(all_text)
@@ -73,16 +75,15 @@ if uploaded_file:
     indicator_match = re.search(r"INDICATOR\s*DATA\s*[:\s]*([^\n]+)", all_text, re.IGNORECASE)
     indicator_text = indicator_match.group(1).strip() if indicator_match else "정보 없음"
     
-    # 화면 배치 (3단 구성)
     row1_c1, row1_c2, row1_c3 = st.columns(3)
     with row1_c1:
+        # 이제 S521A, 2DIGIT, G/S 문구가 여기에 정확히 표시됩니다.
         st.info(f"✨ **OPB 타입/사양 (INDICATOR)**\n\n{opb_type_text}")
     with row1_c2:
-        st.info(f"📄 **S/W PANEL 도면 (BOM 확인)**\n\n{sw_panel_dwg.group(1) if sw_panel_dwg else '정보 없음'}")
+        st.info(f"📄 **S/W PANEL 도면 (BOM 필수 확인)**\n\n{sw_panel_dwg.group(1) if sw_panel_dwg else '정보 없음'}")
     with row1_c3:
-        st.info(f"📟 **인디케이터 표시 문구**\n\n{indicator_text}")
+        st.info(f"📟 **인디케이터 표시 문구 (INDICATOR DATA)**\n\n{indicator_text}")
 
-    # 추가 스위치 사양
     aircon_sw = "AIR-CON S/W 적용" in all_text or "에어컨" in all_text
     skip_sw = "OWNER SKIP S/W 적용" in all_text or "오너스킵" in all_text
     
@@ -108,7 +109,7 @@ if uploaded_file:
     with c_m3:
         st.metric("✨ 표면 사양", f"ST'S {material}")
 
-    # 6. 자재 리스트 분석
+    # 6. 자재 리스트 분석 (중복 컬럼 에러 방지 포함)
     if all_tables:
         df_raw = pd.DataFrame(all_tables)
         header_idx = 0
@@ -130,4 +131,3 @@ if uploaded_file:
 
         st.subheader("📦 전체 자재 리스트")
         st.dataframe(df, use_container_width=True, hide_index=True)
-    
