@@ -11,7 +11,7 @@ if os.path.exists("logo.png"):
     st.image("logo.png", width=150)
 
 st.title("SMC OPB생산 BOM통합 시스템 V 1.0")
-st.write("OPB 상세 사양(S521A 등) 및 S/W PANEL 제작 정보를 정밀 분석합니다.")
+st.write("BOX 규격, OPB 상세 사양(S521A 등) 및 S/W PANEL 제작 정보를 정밀 분석합니다.")
 
 uploaded_file = st.file_uploader("분석할 BOM PDF 파일을 선택하세요", type="pdf")
 
@@ -59,12 +59,14 @@ if uploaded_file:
     st.divider()
 
     # ---------------------------------------------------------
-    # 4. 🎛️ OPB 상세 사양 (S521A, 2DIGIT 등 추출 강화)
+    # 4. 🎛️ OPB 및 S/W PANEL 상세 사양 (BOX 규격 포함)
     # ---------------------------------------------------------
     st.subheader("🎛️ OPB 및 S/W PANEL 상세 제작 사양")
     
-    # [수정된 로직] S521A, D521AG 등 다양한 사양 형식을 꼼꼼하게 찾습니다.
-    # 쉼표나 점(.)이 섞인 경우까지 모두 포함합니다.
+    # BOX 규격 추출 로직 (164 x 1704 등 다양한 형식 대응) 
+    box_match = re.search(r"BOX\s*[:\s]*([\d\s*xX]+)", all_text, re.IGNORECASE)
+    box_size_text = box_match.group(1).strip() if box_match else "정보 없음"
+
     opb_spec_pattern = re.compile(r"([SD]\d{3}[A-Z]?[,.]?\s*\d?DIGIT\.?[,.]?\s*G/S|[SD]\d{3}[A-Z]{1,2})", re.IGNORECASE)
     opb_spec_search = opb_spec_pattern.search(all_text)
     opb_type_text = opb_spec_search.group(1).replace("\n", " ").strip() if opb_spec_search else "정보 없음"
@@ -75,41 +77,43 @@ if uploaded_file:
     indicator_match = re.search(r"INDICATOR\s*DATA\s*[:\s]*([^\n]+)", all_text, re.IGNORECASE)
     indicator_text = indicator_match.group(1).strip() if indicator_match else "정보 없음"
     
-    row1_c1, row1_c2, row1_c3 = st.columns(3)
-    with row1_c1:
-        # 이제 S521A, 2DIGIT, G/S 문구가 여기에 정확히 표시됩니다.
+    # 1행 배치 (OPB 사양, BOX 규격, S/W 도면)
+    r1_c1, r1_c2, r1_c3 = st.columns(3)
+    with r1_c1:
         st.info(f"✨ **OPB 타입/사양 (INDICATOR)**\n\n{opb_type_text}")
-    with row1_c2:
+    with r1_c2:
+        # BOX 규격 전용 칸 신설
+        st.info(f"📏 **메인 BOX 규격**\n\n{box_size_text}")
+    with r1_c3:
         st.info(f"📄 **S/W PANEL 도면 (BOM 필수 확인)**\n\n{sw_panel_dwg.group(1) if sw_panel_dwg else '정보 없음'}")
-    with row1_c3:
-        st.info(f"📟 **인디케이터 표시 문구 (INDICATOR DATA)**\n\n{indicator_text}")
 
-    aircon_sw = "AIR-CON S/W 적용" in all_text or "에어컨" in all_text
-    skip_sw = "OWNER SKIP S/W 적용" in all_text or "오너스킵" in all_text
-    
-    row2_c1, row2_c2 = st.columns(2)
-    with row2_c1:
+    # 2행 배치 (인디케이터 문구, 에어컨, 오너스킵)
+    r2_c1, r2_c2, r2_c3 = st.columns(3)
+    with r2_c1:
+        st.info(f"📟 **인디케이터 표시 문구**\n\n{indicator_text}")
+    with r2_c2:
+        aircon_sw = "AIR-CON S/W 적용" in all_text or "에어컨" in all_text
         st.info(f"❄️ **에어컨 스위치:** {'적용' if aircon_sw else '미적용'}")
-    with row2_c2:
+    with r2_c3:
+        skip_sw = "OWNER SKIP S/W 적용" in all_text or "오너스킵" in all_text
         st.info(f"⏭️ **오너 스킵 스위치:** {'적용' if skip_sw else '미적용'}")
     
     st.divider()
 
-    # 5. 핵심 제작 정보 요약
+    # 5. 핵심 제작 정보 요약 (이미 강조되어 있음)
     st.subheader("📋 핵심 제작 사양 요약")
     floor_match = re.search(r"TOTAL\s*FLOOR\s*[:\s]*([^\n]+)", all_text, re.IGNORECASE)
-    box_size = re.search(r"BOX\s*[:\s]*([\d\s*xX]+)", all_text)
     material = "MIRROR" if any(k in all_text for k in ["미러", "MIRROR"]) else "HAIRLINE"
 
     c_m1, c_m2, c_m3 = st.columns(3)
     with c_m1:
         st.metric("🏢 전체 층수 (TOTAL)", floor_match.group(1).strip() if floor_match else "미확인")
     with c_m2:
-        st.metric("📏 BOX 규격", box_size.group(1) if box_size else "미확인")
+        st.metric("📏 BOX 규격 (확인용)", box_size_text)
     with c_m3:
         st.metric("✨ 표면 사양", f"ST'S {material}")
 
-    # 6. 자재 리스트 분석 (중복 컬럼 에러 방지 포함)
+    # 6. 자재 리스트 분석
     if all_tables:
         df_raw = pd.DataFrame(all_tables)
         header_idx = 0
