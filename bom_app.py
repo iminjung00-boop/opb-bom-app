@@ -5,18 +5,17 @@ import re
 import os
 
 # 1. 페이지 설정 및 버전 정의
-APP_VERSION = "V 1.2.1"
+APP_VERSION = "V 1.2.2"
 LAST_UPDATE = "2026.04.11"
 
 st.set_page_config(page_title=f"SMC OPB BOM 시스템 {APP_VERSION}", layout="wide")
 
 def show_updates():
     st.info(f"""
-    **🚀 {APP_VERSION} 데이터 복구 완료 ({LAST_UPDATE})**
-    * **NAME PLATE 정보 추가**: 인승(15인승) 및 용량(1150kg) 정보를 제작 사양에 포함 
-    * **기준층 정보 정밀화**: TOTAL FLOOR 및 기준층(1층) 정보를 요약란에 배치 
-    * **E280A 블록 고정 분석**: 메인 OPB 사양(S521A)을 E280A 행에서 직접 추출 
-    * **누락 방지 로직**: 이전의 모든 주의사항, 사양, 자재 리스트를 통합하여 고정
+    **🚀 {APP_VERSION} 인승/용량 추출 보강 완료 ({LAST_UPDATE})**
+    * **인승/용량 인식 개선**: 파편화된 NAME PLATE 텍스트(15인승, 1150kg)를 추출하는 정규식 강화
+    * **고정 데이터 매핑**: E280A 블록의 S521A 사양과 기준층 정보 누락 방지 처리
+    * **UI 최적화**: 핵심 사양 4종(층수, 기준층, 타입, 인승/용량)을 상단 대시보드에 고정
     """)
 
 if os.path.exists("logo.png"):
@@ -43,7 +42,6 @@ if uploaded_file:
 
     st.header(f"📊 {project} ({unit})")
 
-    # 3. 데이터 가공 및 정밀 분석
     if all_tables:
         df_raw = pd.DataFrame(all_tables)
         header_idx = 0
@@ -57,9 +55,18 @@ if uploaded_file:
         df.columns = [str(c).replace('\n', ' ') for c in df.columns]
 
         # ---------------------------------------------------------
-        # 4. [복구] 사양 추출 (E280A 및 NAME PLATE)
+        # 3. [핵심] 인승/용량 및 사양 정밀 추출
         # ---------------------------------------------------------
-        # (1) OPB 타입 (E280A 블록 분석)
+        # (1) 인승 및 용량 (유연한 정규식 적용)
+        # '15 인승' 또는 '15인승', '1150 kg' 또는 '1150kg' 모두 대응
+        person_match = re.search(r"(\d+)\s*인승", all_text)
+        capacity_match = re.search(r"(\d+)\s*kg", all_text)
+        
+        p_val = person_match.group(1) if person_match else "미확인"
+        c_val = capacity_match.group(1) if capacity_match else "미확인"
+        name_plate_info = f"{p_val}인승 / {c_val}kg"
+
+        # (2) OPB 타입 (E280A 행 직접 분석)
         opb_spec = "정보 없음"
         target_row = df[df.astype(str).apply(lambda x: x.str.contains('E280A')).any(axis=1)]
         if not target_row.empty:
@@ -67,21 +74,19 @@ if uploaded_file:
             spec_find = re.search(r"OPB\s*([SD]\s*\d\s*\d\s*\d\s*[A-Z]?)", row_content, re.IGNORECASE)
             if spec_find:
                 opb_spec = re.sub(r'\s+', '', spec_find.group(1))
-        
-        # (2) 인승 및 용량 (NAME PLATE)
-        person_match = re.search(r"인승\s*(\d+)\s*인승", all_text)
-        capacity_match = re.search(r"용량\s*[:\s]*(\d+)\s*kg", all_text)
-        name_plate_info = f"{person_match.group(1)}인승 / {capacity_match.group(1)}kg" if person_match and capacity_match else "정보 없음"
 
         # (3) 층수 및 기준층
         parking_match = re.search(r"기준층\s*버튼\s*PARKING\s*SW\s*적용\s*\(([^)]+)\)", all_text)
         parking_val = parking_match.group(1) if parking_match else "미적용"
-        floor_info = re.search(r"TOTAL\s*FLOOR\s*[:\s]*([0-9A-Z,\s]+)", all_text, re.IGNORECASE)
+        
+        # TOTAL FLOOR : B2,B1,1,2,3,4,5,6 형태 대응
+        floor_info = re.search(r"TOTAL\s*FLOOR\s*[:\s]*([^\n,]+(?:,[^\n,]+)*)", all_text, re.IGNORECASE)
         total_floors = floor_info.group(1).split('기준층')[0].strip() if floor_info else "미확인"
+        
         base_floor_match = re.search(r"기준층\s*[:\s]*([0-9A-Z]+)", all_text)
         base_floor = base_floor_match.group(1).strip() if base_floor_match else "미확인"
 
-        # 5. 화면 출력
+        # 4. 화면 출력
         st.subheader("⚠️ 생산 핵심 주의사항")
         c_w1, c_w2 = st.columns(2)
         with c_w1:
@@ -96,7 +101,7 @@ if uploaded_file:
         st.subheader("📋 핵심 제작 사양 요약")
         c_m1, c_m2, c_m3, c_m4 = st.columns(4)
         with c_m1: st.metric("🏢 전체 층수", total_floors)
-        with c_m2: st.metric("📍 기준층", base_floor)
+        with c_m2: st.metric("📍 기준층 위치", base_floor)
         with c_m3: st.metric("✨ OPB 타입", opb_spec)
         with c_m4: st.metric("👥 인승/용량", name_plate_info)
 
