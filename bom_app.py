@@ -5,17 +5,17 @@ import re
 import os
 
 # 1. 페이지 설정 및 버전 정의
-APP_VERSION = "V 1.2.4"
+APP_VERSION = "V 1.2.5"
 LAST_UPDATE = "2026.04.11"
 
 st.set_page_config(page_title=f"SMC OPB BOM 시스템 {APP_VERSION}", layout="wide")
 
 def show_updates():
     st.info(f"""
-    **🚀 {APP_VERSION} 레이아웃 최적화 업데이트 ({LAST_UPDATE})**
-    * **정보 재배치**: OPB 타입/사양 정보를 '상세 제작 사양' 섹션으로 이동하여 가독성 향상 [cite: 7]
-    * **데이터 유지**: 인승/용량, 열림방향, 기준층 등 추출된 모든 핵심 데이터 보존 [cite: 7, 25]
-    * **누락 방지**: E280A 블록 기반 정밀 추출 로직 유지 [cite: 7]
+    **🚀 {APP_VERSION} 데이터 완전성 복구 ({LAST_UPDATE})**
+    * **인디케이터 문구 복구**: A2000 블록 등에서 추출한 'INDICATOR DATA' 정보를 상세 사양 섹션에 재배치 
+    * **오너스킵 사양 유지**: 누락되었던 오너스킵 S/W 적용 여부를 다시 포함
+    * **고정 데이터 매핑**: 층수, 기준층, 인승/용량, 열림방향, OPB 타입 등 모든 데이터 통합 유지
     """)
 
 if os.path.exists("logo.png"):
@@ -36,7 +36,7 @@ if uploaded_file:
             if table:
                 all_tables.extend(table)
 
-    # 2. 기본 정보 추출 [cite: 1, 2]
+    # 2. 기본 정보 추출
     project = re.search(r"공사명\s*[:\s]+([^\n]+)", all_text).group(1).strip() if "공사명" in all_text else "미확인"
     unit = re.search(r"호기번호\s*[:\s]+([A-Z0-9]+)", all_text).group(1).strip() if "호기번호" in all_text else "미확인"
 
@@ -55,9 +55,9 @@ if uploaded_file:
         df.columns = [str(c).replace('\n', ' ') for c in df.columns]
 
         # ---------------------------------------------------------
-        # 3. 데이터 정밀 추출 로직 [cite: 7, 25]
+        # 3. 데이터 정밀 추출 로직 (누락 방지)
         # ---------------------------------------------------------
-        # (1) 인승/용량 및 열림방향 [cite: 25]
+        # (1) 인승/용량 및 열림방향
         person_match = re.search(r"(\d+)\s*인승", all_text)
         capacity_match = re.search(r"(\d+)\s*kg", all_text)
         p_val = person_match.group(1) if person_match else "미확인"
@@ -67,7 +67,7 @@ if uploaded_file:
         open_dir_match = re.search(r"열림방향(?:\(MAIN\))?\s*[:\s]*([가-힣A-Z/]+)", all_text)
         open_direction = open_dir_match.group(1).strip() if open_dir_match else "미확인"
 
-        # (2) OPB 타입 (E280A 행 직접 분석) [cite: 7]
+        # (2) OPB 타입 (E280A 행 직접 분석)
         opb_spec = "정보 없음"
         target_row = df[df.astype(str).apply(lambda x: x.str.contains('E280A')).any(axis=1)]
         if not target_row.empty:
@@ -76,13 +76,20 @@ if uploaded_file:
             if spec_find:
                 opb_spec = re.sub(r'\s+', '', spec_find.group(1))
 
-        # (3) 층수 및 기준층 [cite: 7]
+        # (3) 층수 및 기준층
         parking_match = re.search(r"기준층\s*버튼\s*PARKING\s*SW\s*적용\s*\(([^)]+)\)", all_text)
         parking_val = parking_match.group(1) if parking_match else "미적용"
         floor_info = re.search(r"TOTAL\s*FLOOR\s*[:\s]*([^\n,]+(?:,[^\n,]+)*)", all_text, re.IGNORECASE)
         total_floors = floor_info.group(1).split('기준층')[0].strip() if floor_info else "미확인"
         base_floor_match = re.search(r"기준층\s*[:\s]*([0-9A-Z]+)", all_text)
         base_floor = base_floor_match.group(1).strip() if base_floor_match else "미확인"
+
+        # (4) 인디케이터 문구 및 취부 사양 (A2000 블록 등 분석) 
+        indicator_match = re.search(r"INDICATOR\s*DATA\s*[:\s]*([^\n]+)", all_text, re.IGNORECASE)
+        indicator_text = indicator_match.group(1).strip() if indicator_match else "정보 없음"
+        
+        aircon = "✅ 적용" if any(k in all_text for k in ["AIR-CON", "에어컨"]) else "❌ 미적용"
+        skip_sw = "✅ 적용" if any(k in all_text for k in ["SKIP S/W", "오너스킵"]) else "❌ 미적용"
 
         # 4. 화면 출력
         st.subheader("⚠️ 생산 핵심 주의사항")
@@ -96,7 +103,6 @@ if uploaded_file:
 
         st.divider()
 
-        # 요약란에서는 타입 제외, 기본 물리 사양 위주로 배치 [cite: 7, 25]
         st.subheader("📋 핵심 제작 사양 요약")
         m_c1, m_c2, m_c3, m_c4 = st.columns(4)
         with m_c1: st.metric("🏢 전체 층수", total_floors)
@@ -106,18 +112,20 @@ if uploaded_file:
 
         st.divider()
 
-        # [변경] OPB 타입/사양을 이 섹션의 첫 번째 칸으로 이동 [cite: 7]
         st.subheader("🎛️ OPB 상세 제작 사양")
         box_match = re.search(r"BOX\s*[:\s]*([\d\s*xX,]{5,20})", all_text, re.IGNORECASE)
         sw_dwg = re.search(r"S/W\s*PANEL.*?DWG\s*NO\.?\s*[:\s]*([0-9A-Z]+)", all_text, re.IGNORECASE | re.DOTALL)
         
-        r1_c1, r1_c2, r1_c3, r1_c4 = st.columns(4)
+        # 상세 사양 섹션 레이아웃 보강 (3열 x 2행 구성)
+        r1_c1, r1_c2, r1_c3 = st.columns(3)
         with r1_c1: st.info(f"✨ **OPB 타입/사양**\n\n{opb_spec}")
         with r1_c2: st.info(f"📏 **MAIN BOX size**\n\n{box_match.group(1).strip() if box_match else '정보 없음'}")
         with r1_c3: st.info(f"📄 **S/W PANEL 도면**\n\n{sw_dwg.group(1) if sw_dwg else '정보 없음'}")
-        with r1_c4: 
-            aircon = "✅ 적용" if any(k in all_text for k in ["AIR-CON", "에어컨"]) else "❌ 미적용"
-            st.success(f"❄️ **에어컨 S/W:** {aircon}")
+
+        r2_c1, r2_c2, r2_c3 = st.columns(3)
+        with r2_c1: st.info(f"📟 **인디케이터 표시 문구**\n\n{indicator_text}")
+        with r2_c2: st.success(f"❄️ **에어컨 S/W:** {aircon}")
+        with r2_c3: st.success(f"⏭️ **오너스킵 S/W:** {skip_sw}")
 
         st.divider()
 
