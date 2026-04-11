@@ -5,17 +5,17 @@ import re
 import os
 
 # 1. 페이지 설정 및 버전 정의
-APP_VERSION = "V 1.2.2"
+APP_VERSION = "V 1.2.3"
 LAST_UPDATE = "2026.04.11"
 
 st.set_page_config(page_title=f"SMC OPB BOM 시스템 {APP_VERSION}", layout="wide")
 
 def show_updates():
     st.info(f"""
-    **🚀 {APP_VERSION} 인승/용량 추출 보강 완료 ({LAST_UPDATE})**
-    * **인승/용량 인식 개선**: 파편화된 NAME PLATE 텍스트(15인승, 1150kg)를 추출하는 정규식 강화
-    * **고정 데이터 매핑**: E280A 블록의 S521A 사양과 기준층 정보 누락 방지 처리
-    * **UI 최적화**: 핵심 사양 4종(층수, 기준층, 타입, 인승/용량)을 상단 대시보드에 고정
+    **🚀 {APP_VERSION} 데이터 완전성 강화 ({LAST_UPDATE})**
+    * **열림방향 복구**: 누락되었던 열림방향(CO) 정보를 추출하여 상단 요약란에 배치
+    * **인승/용량 유지**: 15인승 / 1150kg 등 NAME PLATE 정보 고정 출력
+    * **추출 로직 통합**: E280A 블록 사양(S521A)과 기준층, 층수 정보의 상호 간섭 방지
     """)
 
 if os.path.exists("logo.png"):
@@ -55,16 +55,17 @@ if uploaded_file:
         df.columns = [str(c).replace('\n', ' ') for c in df.columns]
 
         # ---------------------------------------------------------
-        # 3. [핵심] 인승/용량 및 사양 정밀 추출
+        # 3. 데이터 정밀 추출 (누락 방지 로직)
         # ---------------------------------------------------------
-        # (1) 인승 및 용량 (유연한 정규식 적용)
-        # '15 인승' 또는 '15인승', '1150 kg' 또는 '1150kg' 모두 대응
+        # (1) 인승/용량 및 열림방향
         person_match = re.search(r"(\d+)\s*인승", all_text)
         capacity_match = re.search(r"(\d+)\s*kg", all_text)
-        
         p_val = person_match.group(1) if person_match else "미확인"
         c_val = capacity_match.group(1) if capacity_match else "미확인"
         name_plate_info = f"{p_val}인승 / {c_val}kg"
+
+        open_dir_match = re.search(r"열림방향(?:\(MAIN\))?\s*[:\s]*([가-힣A-Z/]+)", all_text)
+        open_direction = open_dir_match.group(1).strip() if open_dir_match else "미확인"
 
         # (2) OPB 타입 (E280A 행 직접 분석)
         opb_spec = "정보 없음"
@@ -78,15 +79,12 @@ if uploaded_file:
         # (3) 층수 및 기준층
         parking_match = re.search(r"기준층\s*버튼\s*PARKING\s*SW\s*적용\s*\(([^)]+)\)", all_text)
         parking_val = parking_match.group(1) if parking_match else "미적용"
-        
-        # TOTAL FLOOR : B2,B1,1,2,3,4,5,6 형태 대응
         floor_info = re.search(r"TOTAL\s*FLOOR\s*[:\s]*([^\n,]+(?:,[^\n,]+)*)", all_text, re.IGNORECASE)
         total_floors = floor_info.group(1).split('기준층')[0].strip() if floor_info else "미확인"
-        
         base_floor_match = re.search(r"기준층\s*[:\s]*([0-9A-Z]+)", all_text)
         base_floor = base_floor_match.group(1).strip() if base_floor_match else "미확인"
 
-        # 4. 화면 출력
+        # 4. 화면 출력 (5열 대시보드로 확장)
         st.subheader("⚠️ 생산 핵심 주의사항")
         c_w1, c_w2 = st.columns(2)
         with c_w1:
@@ -99,11 +97,12 @@ if uploaded_file:
         st.divider()
 
         st.subheader("📋 핵심 제작 사양 요약")
-        c_m1, c_m2, c_m3, c_m4 = st.columns(4)
-        with c_m1: st.metric("🏢 전체 층수", total_floors)
-        with c_m2: st.metric("📍 기준층 위치", base_floor)
-        with c_m3: st.metric("✨ OPB 타입", opb_spec)
-        with c_m4: st.metric("👥 인승/용량", name_plate_info)
+        m_c1, m_c2, m_c3, m_c4, m_c5 = st.columns(5)
+        with m_c1: st.metric("🏢 전체 층수", total_floors)
+        with m_c2: st.metric("📍 기준층 위치", base_floor)
+        with m_c3: st.metric("✨ OPB 타입", opb_spec)
+        with m_c4: st.metric("👥 인승/용량", name_plate_info)
+        with m_c5: st.metric("🚪 열림방향", open_direction)
 
         st.divider()
 
