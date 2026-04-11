@@ -5,18 +5,17 @@ import re
 import os
 
 # 1. 페이지 설정 및 버전 정의
-APP_VERSION = "V 1.3.5"
+APP_VERSION = "V 1.3.6"
 LAST_UPDATE = "2026.04.11"
 
 st.set_page_config(page_title=f"SMC OPB BOM 시스템 {APP_VERSION}", layout="wide")
 
 def show_updates():
     st.info(f"""
-    **🚀 {APP_VERSION} 시스템 복구 및 시각화 개선 완료 ({LAST_UPDATE})**
-    * **문법 오류 해결**: 코드 내 불필요한 시스템 태그를 완벽히 제거하여 실행 에러 해결
-    * **층수 정보 가독성 최적화**: 긴 층수 정보(TOTAL FLOOR)를 작은 글씨로 출력하여 잘림 현상 방지
-    * **A2000 블록 정밀 분석**: 전기의장 블록의 모든 층수 정보를 원문 그대로 추출
-    * **데이터 일관성**: PCB 옵션, 인승/용량, 열림방향 등 모든 실무 로직 유지
+    **🚀 {APP_VERSION} 층수 정보 출력 범위 정밀 조정 ({LAST_UPDATE})**
+    * **출력 가독성 강화**: A2000 블록 추출 시 'FRONT STOP FLOOR' 이전까지만 잘라내어 불필요한 정보 제거
+    * **핵심 사양 집중**: TOTAL FLOOR와 상세 층 리스트, 기준층 정보만 명확하게 노출
+    * **시각화 유지**: 작은 글씨(Caption) 모드를 유지하여 긴 층수 정보도 한눈에 확인 가능
     """)
 
 if os.path.exists("logo.png"):
@@ -62,12 +61,20 @@ if uploaded_file:
         # 3. 데이터 정밀 추출 로직
         # ---------------------------------------------------------
         
-        # (1) A2000 블록 층수 정보 추출
+        # (1) [수정 핵심] A2000 블록 층수 정보 추출 (FRONT STOP FLOOR 이전까지만)
         total_floors_display = "미확인"
-        a2000_area = re.search(r"A2000.*?TOTAL\s*FLOOR(.*?)(?=HX\s*1000|C2620|$)", all_text, re.DOTALL | re.IGNORECASE)
+        # A2000 시작부터 TOTAL FLOOR를 거쳐 FRONT STOP FLOOR 직전까지만 캡처
+        a2000_area = re.search(r"A2000.*?TOTAL\s*FLOOR(.*?)(?=FRONT\s*STOP\s*FLOOR|HX\s*1000|C2620|$)", all_text, re.DOTALL | re.IGNORECASE)
+        
         if a2000_area:
             raw_floors = a2000_area.group(1).strip()
-            total_floors_display = re.sub(r'\s+', ' ', raw_floors).strip()
+            # 불필요한 줄바꿈 및 공백 정리
+            total_floors_display = "TOTAL FLOOR " + re.sub(r'\s+', ' ', raw_floors).strip()
+        else:
+            # 보조 패턴
+            backup_floors = re.search(r"TOTAL\s*FLOOR\s*[:\s]*([B0-9A-Z,.\s/]+(?:기준층|MAIN)[^)\n]*)", all_text, re.IGNORECASE)
+            if backup_floors:
+                total_floors_display = backup_floors.group(0).split("FRONT STOP")[0].strip()
 
         # (2) 인승/용량 및 열림방향
         person_match = re.search(r"(\d+)\s*인승", all_text)
@@ -116,7 +123,6 @@ if uploaded_file:
 
         st.divider()
 
-        # 층수 정보 가독성 개선 섹션
         st.subheader("📋 핵심 제작 사양 요약")
         m_c1, m_c2, m_c3 = st.columns([2, 1, 1]) 
         with m_c1: 
