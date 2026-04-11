@@ -5,18 +5,18 @@ import re
 import os
 
 # 1. 페이지 설정 및 버전 정의
-APP_VERSION = "V 1.1.4"
+APP_VERSION = "V 1.1.5"
 LAST_UPDATE = "2026.04.11"
 
 st.set_page_config(page_title=f"SMC OPB BOM 시스템 {APP_VERSION}", layout="wide")
 
-# [업데이트 및 누락 방지 안내]
+# 업데이트 안내
 def show_updates():
     st.info(f"""
     **🚀 {APP_VERSION} 업데이트 완료 ({LAST_UPDATE})**
-    * **추출 정밀도 향상**: OPB 타입/사양(S521A 등)이 BOM 데이터와 일치하도록 로직 수정
-    * **데이터 고정**: 기준층, 층수 정보, 에어컨/오너스킵 등 핵심 사양 누락 방지 처리
-    * **안정성 강화**: PDF 내 텍스트 분석 시 특수문자 및 공백 처리 최적화
+    * **사양 추출 로직 정밀화**: HPI 사양(S700)과 메인 OPB 사양(S521A) 혼동 문제 해결
+    * **데이터 고정**: 기준층, 층수 정보, 에어컨/오너스킵 등 핵심 사양 누락 방지 강화
+    * **안정성 강화**: PDF 내 텍스트 분석 시 특정 키워드(E280A) 기반 우선 탐색 적용
     """)
 
 if os.path.exists("logo.png"):
@@ -60,7 +60,7 @@ if uploaded_file:
 
     st.divider()
 
-    # 4. 📋 핵심 제작 사양 요약 (층수 및 재질)
+    # 4. 📋 핵심 제작 사양 요약
     st.subheader("📋 핵심 제작 사양 요약")
     floor_info_match = re.search(r"TOTAL\s*FLOOR\s*[:\s]*([0-9A-Z,\s]+)", all_text, re.IGNORECASE)
     total_floors = floor_info_match.group(1).strip() if floor_info_match else "미확인"
@@ -76,16 +76,13 @@ if uploaded_file:
 
     st.divider()
 
-    # 5. 🎛️ OPB 상세 사양 (S521A 추출 로직 보강)
+    # 5. 🎛️ OPB 상세 사양 (중복 사양 해결 로직)
     st.subheader("🎛️ OPB 및 S/W PANEL 상세 사양")
     
-    # [수정] OPB 타입/사양 추출 정규식 강화
-    opb_spec_search = re.search(r"([SD]\d{3}[A-Z]?[^A-Z\n]*DIGIT[^A-Z\n]*G/S)", all_text, re.IGNORECASE)
+    # [수정] E280A(메인 OPB) 블록 이후의 사양을 우선적으로 찾도록 개선
+    main_opb_part = all_text.split("E280A")[-1] if "E280A" in all_text else all_text
+    opb_spec_search = re.search(r"([SD]\d{3}[A-Z]?[^A-Z\n]*DIGIT[^A-Z\n]*G/S)", main_opb_part, re.IGNORECASE)
     opb_type_text = opb_spec_search.group(1).strip() if opb_spec_search else "정보 없음"
-    # 만약 위 패턴으로 안 나올 경우 보조 패턴 사용
-    if opb_type_text == "정보 없음":
-        alt_spec = re.search(r"(S\d{3}[A-Z])", all_text)
-        if alt_spec: opb_type_text = alt_spec.group(1)
 
     box_match = re.search(r"BOX\s*[:\s]*([\d\s*xX,]{5,20})", all_text, re.IGNORECASE)
     sw_dwg = re.search(r"S/W\s*PANEL.*?DWG\s*NO\.?\s*[:\s]*([0-9A-Z]+)", all_text, re.IGNORECASE | re.DOTALL)
@@ -128,3 +125,4 @@ if uploaded_file:
         
         st.subheader("📦 전체 자재 리스트 (원본)")
         st.dataframe(df, use_container_width=True, hide_index=True)
+        
