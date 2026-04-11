@@ -5,7 +5,7 @@ import re
 import os
 
 # 1. 페이지 설정 및 버전 정의
-APP_VERSION = "V 1.1.6"
+APP_VERSION = "V 1.1.7"
 LAST_UPDATE = "2026.04.11"
 
 st.set_page_config(page_title=f"SMC OPB BOM 시스템 {APP_VERSION}", layout="wide")
@@ -14,9 +14,9 @@ st.set_page_config(page_title=f"SMC OPB BOM 시스템 {APP_VERSION}", layout="wi
 def show_updates():
     st.info(f"""
     **🚀 {APP_VERSION} 업데이트 완료 ({LAST_UPDATE})**
-    * **추출 엔진 최적화**: 텍스트 내 불규칙한 공백(예: S52 1A)이 있어도 사양을 인식하도록 개선
-    * **타겟팅 강화**: 메인 OPB(E280A) 섹션의 데이터를 최우선으로 분석
-    * **누락 방지**: 기준층, 에어컨, 층수 정보 및 전체 자재 리스트 섹션 유지
+    * **추출 정밀도 고도화**: 재질 번호(S304 등)와 사양 코드(S521A 등)를 완벽히 구분하도록 로직 개선
+    * **섹션 타겟팅**: 메인 OPB 데이터 블록(E280A) 내에서만 인디케이터 사양을 검색하여 정확도 확보
+    * **누락 방지**: 기준층, 에어컨, 층수 정보 및 전체 자재 리스트 섹션 고정 유지
     """)
 
 if os.path.exists("logo.png"):
@@ -37,7 +37,7 @@ if uploaded_file:
             if table:
                 all_tables.extend(table)
 
-    # 2. 정보 추출 (공사명, 호기번호)
+    # 2. 정보 추출
     project = re.search(r"공사명\s*[:\s]+([^\n]+)", all_text).group(1).strip() if "공사명" in all_text else "미확인"
     unit = re.search(r"호기번호\s*[:\s]+([A-Z0-9]+)", all_text).group(1).strip() if "호기번호" in all_text else "미확인"
 
@@ -76,22 +76,26 @@ if uploaded_file:
 
     st.divider()
 
-    # 5. 🎛️ OPB 상세 사양 (공백 대응 로직)
+    # 5. 🎛️ OPB 상세 사양 (재질 번호 필터링 로직 추가)
     st.subheader("🎛️ OPB 및 S/W PANEL 상세 사양")
     
-    # E280A 섹션 텍스트만 추출하여 분석 (사양 혼동 방지)
+    # E280A 섹션 내부에서만 검색하여 재질(SUS304) 등과의 혼동 방지
     main_opb_part = all_text.split("E280A")[-1] if "E280A" in all_text else all_text
     
-    # [핵심 수정] 숫자 사이 공백(\s*)까지 허용하는 유연한 정규식 적용
-    # S521A, S52 1A 등을 모두 찾음
+    # [정밀 수정] DIGIT 또는 G/S가 포함된 사양 패턴 우선 탐색
     opb_spec_search = re.search(r"([SD]\s*\d\s*\d\s*\d\s*[A-Z]?[\s,.]*\d?\s*DIGIT[\s,.]*G/S)", main_opb_part, re.IGNORECASE)
     
     if opb_spec_search:
-        opb_type_text = re.sub(r'\s+', '', opb_spec_search.group(1)) # 결과에서는 공백 제거
+        opb_type_text = re.sub(r'\s+', '', opb_spec_search.group(1))
     else:
-        # 보조 패턴: S521A 처럼 단순 코드만 있는 경우
-        alt_spec = re.search(r"([SD]\s*\d\s*\d\s*\d\s*[A-Z]?)", main_opb_part)
-        opb_type_text = re.sub(r'\s+', '', alt_spec.group(1)) if alt_spec else "정보 없음"
+        # 보조 패턴: 숫자 3자리와 알파벳 조합 탐색 (단, S304 같은 재질코드는 제외)
+        alt_specs = re.findall(r"([SD]\s*\d\s*\d\s*\d\s*[A-Z]?)", main_opb_part)
+        opb_type_text = "정보 없음"
+        for spec in alt_specs:
+            cleaned = re.sub(r'\s+', '', spec)
+            if cleaned not in ["S304", "S430", "S439"]: # 재질 코드는 제외
+                opb_type_text = cleaned
+                break
 
     box_match = re.search(r"BOX\s*[:\s]*([\d\s*xX,]{5,20})", all_text, re.IGNORECASE)
     sw_dwg = re.search(r"S/W\s*PANEL.*?DWG\s*NO\.?\s*[:\s]*([0-9A-Z]+)", all_text, re.IGNORECASE | re.DOTALL)
