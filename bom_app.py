@@ -5,17 +5,17 @@ import re
 import os
 
 # 1. 페이지 설정 및 버전 정의
-APP_VERSION = "V 1.2.5"
+APP_VERSION = "V 1.2.6"
 LAST_UPDATE = "2026.04.11"
 
 st.set_page_config(page_title=f"SMC OPB BOM 시스템 {APP_VERSION}", layout="wide")
 
 def show_updates():
     st.info(f"""
-    **🚀 {APP_VERSION} 데이터 완전성 복구 ({LAST_UPDATE})**
-    * **인디케이터 문구 복구**: A2000 블록 등에서 추출한 'INDICATOR DATA' 정보를 상세 사양 섹션에 재배치 
-    * **오너스킵 사양 유지**: 누락되었던 오너스킵 S/W 적용 여부를 다시 포함
-    * **고정 데이터 매핑**: 층수, 기준층, 인승/용량, 열림방향, OPB 타입 등 모든 데이터 통합 유지
+    **🚀 {APP_VERSION} 데이터 시각화 최적화 ({LAST_UPDATE})**
+    * **표 구성 변경**: '전체 자재 리스트'에서 실무상 불필요한 '협력사' 열을 삭제하여 가독성 향상
+    * **데이터 무결성 유지**: 인디케이터 문구, 인승/용량, 열림방향, 기준층 등 추출된 모든 핵심 사양 보존
+    * **고정 블록 타겟팅**: E280A 블록 기반의 메인 사양 추출 로직을 변함없이 유지
     """)
 
 if os.path.exists("logo.png"):
@@ -54,10 +54,14 @@ if uploaded_file:
         df = df_raw.iloc[header_idx+1:].reset_index(drop=True).dropna(axis=1, how='all')
         df.columns = [str(c).replace('\n', ' ') for c in df.columns]
 
+        # [요청 사항] '협력사' 열 삭제
+        if '협력사' in df.columns:
+            df = df.drop(columns=['협력사'])
+
         # ---------------------------------------------------------
-        # 3. 데이터 정밀 추출 로직 (누락 방지)
+        # 3. 데이터 정밀 추출 로직
         # ---------------------------------------------------------
-        # (1) 인승/용량 및 열림방향
+        # (1) 인승/용량 및 열림방향 [cite: 24, 25]
         person_match = re.search(r"(\d+)\s*인승", all_text)
         capacity_match = re.search(r"(\d+)\s*kg", all_text)
         p_val = person_match.group(1) if person_match else "미확인"
@@ -67,7 +71,7 @@ if uploaded_file:
         open_dir_match = re.search(r"열림방향(?:\(MAIN\))?\s*[:\s]*([가-힣A-Z/]+)", all_text)
         open_direction = open_dir_match.group(1).strip() if open_dir_match else "미확인"
 
-        # (2) OPB 타입 (E280A 행 직접 분석)
+        # (2) OPB 타입 (E280A 행 직접 분석) [cite: 7]
         opb_spec = "정보 없음"
         target_row = df[df.astype(str).apply(lambda x: x.str.contains('E280A')).any(axis=1)]
         if not target_row.empty:
@@ -76,7 +80,7 @@ if uploaded_file:
             if spec_find:
                 opb_spec = re.sub(r'\s+', '', spec_find.group(1))
 
-        # (3) 층수 및 기준층
+        # (3) 층수 및 기준층 [cite: 7]
         parking_match = re.search(r"기준층\s*버튼\s*PARKING\s*SW\s*적용\s*\(([^)]+)\)", all_text)
         parking_val = parking_match.group(1) if parking_match else "미적용"
         floor_info = re.search(r"TOTAL\s*FLOOR\s*[:\s]*([^\n,]+(?:,[^\n,]+)*)", all_text, re.IGNORECASE)
@@ -84,7 +88,7 @@ if uploaded_file:
         base_floor_match = re.search(r"기준층\s*[:\s]*([0-9A-Z]+)", all_text)
         base_floor = base_floor_match.group(1).strip() if base_floor_match else "미확인"
 
-        # (4) 인디케이터 문구 및 취부 사양 (A2000 블록 등 분석) 
+        # (4) 인디케이터 문구 및 취부 사양 
         indicator_match = re.search(r"INDICATOR\s*DATA\s*[:\s]*([^\n]+)", all_text, re.IGNORECASE)
         indicator_text = indicator_match.group(1).strip() if indicator_match else "정보 없음"
         
@@ -116,7 +120,6 @@ if uploaded_file:
         box_match = re.search(r"BOX\s*[:\s]*([\d\s*xX,]{5,20})", all_text, re.IGNORECASE)
         sw_dwg = re.search(r"S/W\s*PANEL.*?DWG\s*NO\.?\s*[:\s]*([0-9A-Z]+)", all_text, re.IGNORECASE | re.DOTALL)
         
-        # 상세 사양 섹션 레이아웃 보강 (3열 x 2행 구성)
         r1_c1, r1_c2, r1_c3 = st.columns(3)
         with r1_c1: st.info(f"✨ **OPB 타입/사양**\n\n{opb_spec}")
         with r1_c2: st.info(f"📏 **MAIN BOX size**\n\n{box_match.group(1).strip() if box_match else '정보 없음'}")
