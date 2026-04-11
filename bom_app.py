@@ -5,17 +5,17 @@ import re
 import os
 
 # 1. 페이지 설정 및 버전 정의
-APP_VERSION = "V 1.3.2"
+APP_VERSION = "V 1.3.3"
 LAST_UPDATE = "2026.04.11"
 
 st.set_page_config(page_title=f"SMC OPB BOM 시스템 {APP_VERSION}", layout="wide")
 
 def show_updates():
     st.info(f"""
-    **🚀 {APP_VERSION} A2000 블록 데이터 정밀 추출 ({LAST_UPDATE})**
-    * **A2000 블록 타겟팅**: 전기의장(A2000) 블록에 기재된 'TOTAL FLOOR' 정보를 잘림 없이 전체 노출
-    * **층수 정보 완전화**: 단순히 층 이름뿐만 아니라 기준층, 정지 층 구성을 포함한 원문 전체 표시
-    * **데이터 일관성**: 이전의 PCB 옵션, 인승/용량, 열림방향, 인디케이터 문구 로직 완벽 유지
+    **🚀 {APP_VERSION} A2000 블록 데이터 완전 추출 ({LAST_UPDATE})**
+    * **A2000 타겟팅 강화**: 전기의장(A2000) 블록 내부의 모든 줄바꿈 텍스트를 인식하여 TOTAL FLOOR 정보 복구
+    * **무제한 텍스트 노출**: 층수 정보가 길어도 잘리지 않고 원문 전체가 대시보드에 표시되도록 로직 수정
+    * **실무 정밀도 유지**: PCB 옵션(GT...G/S), 인승/용량, 열림방향, 인디케이터 문구 등 모든 기존 로직 통합
     """)
 
 if os.path.exists("logo.png"):
@@ -36,7 +36,7 @@ if uploaded_file:
             if table:
                 all_tables.extend(table)
 
-    # 기본 정보 추출
+    # 2. 기본 정보 추출
     project = re.search(r"공사명\s*[:\s]+([^\n]+)", all_text).group(1).strip() if "공사명" in all_text else "미확인"
     unit = re.search(r"호기번호\s*[:\s]+([A-Z0-9]+)", all_text).group(1).strip() if "호기번호" in all_text else "미확인"
 
@@ -58,21 +58,23 @@ if uploaded_file:
             df = df.drop(columns=['협력사'])
 
         # ---------------------------------------------------------
-        # 3. 데이터 정밀 추출 로직 (A2000 블록 집중)
+        # 3. 데이터 정밀 추출 로직 (A2000 블록 완전 정복)
         # ---------------------------------------------------------
         
-        # (1) [핵심 수정] A2000 블록 층수 정보 전체 추출
-        a2000_row = df[df.astype(str).apply(lambda x: x.str.contains('A2000')).any(axis=1)]
-        a2000_content = " ".join(a2000_row.values.flatten().astype(str)) if not a2000_row.empty else all_text
+        # (1) [특수] A2000 블록 내의 모든 층 정보 강제 추출
+        total_floors_display = "미확인"
+        # 텍스트 전체에서 A2000과 TOTAL FLOOR 사이의 가장 긴 구간을 탐색
+        a2000_area = re.search(r"A2000.*?TOTAL\s*FLOOR(.*?)(?=HX\s*1000|C2620|$)", all_text, re.DOTALL | re.IGNORECASE)
         
-        # TOTAL FLOOR 부터 끝까지 넉넉하게 추출 (줄바꿈 등으로 잘리지 않게 처리)
-        floor_full_match = re.search(r"(TOTAL\s*FLOOR\s*[:\s]*[B0-9A-Z,.\s/]+(?:기준층|MAIN)[^)\n]+)", a2000_content, re.IGNORECASE)
-        if floor_full_match:
-            total_floors_display = floor_full_match.group(1).strip()
+        if a2000_area:
+            raw_floors = a2000_area.group(1).strip()
+            # 불필요한 공백 및 중복 줄바꿈 정리
+            total_floors_display = "TOTAL FLOOR " + re.sub(r'\s+', ' ', raw_floors).strip()
         else:
-            # 보조 패턴: 괄호 안의 상세 정보 (8FLOOR 8STOP...)
-            alt_floor = re.search(r"(\d+FLOOR\s*\d+STOP[^)]*)", a2000_content, re.IGNORECASE)
-            total_floors_display = alt_floor.group(1).strip() if alt_floor else "미확인"
+            # 2차 시도: 일반적인 TOTAL FLOOR 패턴 검색
+            backup_floors = re.search(r"TOTAL\s*FLOOR\s*[:\s]*([B0-9A-Z,.\s/]+(?:기준층|MAIN)[^)\n]+)", all_text, re.IGNORECASE)
+            if backup_floors:
+                total_floors_display = backup_floors.group(0).strip()
 
         # (2) 인승/용량 및 열림방향
         person_match = re.search(r"(\d+)\s*인승", all_text)
@@ -98,7 +100,7 @@ if uploaded_file:
             pcb_match = re.search(r"(GT[\s,.]*MAIN.*?G/S)", pcb_text, re.IGNORECASE)
             if pcb_match: pcb_option = re.sub(r'\s+', ' ', pcb_match.group(1)).strip()
 
-        # (5) 기준층 위치 (별도 요약용)
+        # (5) 기준층 위치 (별도 요약)
         base_floor_match = re.search(r"기준층\s*[:\s]*([0-9A-Z]+)", all_text)
         base_floor = base_floor_match.group(1).strip() if base_floor_match else "미확인"
 
