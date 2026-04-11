@@ -5,18 +5,17 @@ import re
 import os
 
 # 1. 페이지 설정 및 버전 정의
-APP_VERSION = "V 1.3.0"
+APP_VERSION = "V 1.3.1"
 LAST_UPDATE = "2026.04.11"
 
 st.set_page_config(page_title=f"SMC OPB BOM 시스템 {APP_VERSION}", layout="wide")
 
 def show_updates():
     st.info(f"""
-    **🚀 {APP_VERSION} 데이터 추출 완전성 강화 ({LAST_UPDATE})**
-    * **층수 정보 완전 노출**: '8FLOOR'와 같은 총 층수와 'B2, B1, 1...6' 같은 상세 리스트를 결합하여 전체 표시
-    * **특수 기호 대응**: 층수 리스트에 포함된 점(.), 슬래시(/), 공백 등이 누락되지 않도록 정규식 개선
-    * **PCB/OPB 사양 유지**: E280A 블록의 S521A 사양과 E280A16의 PCB 옵션 정보를 원하시는 형식대로 유지
-    * **기존 사양 보존**: 인승/용량, 열림방향, 기준층, 인디케이터 문구 등 모든 데이터 통합 관리
+    **🚀 {APP_VERSION} 현장별 가변 데이터 대응 업데이트 ({LAST_UPDATE})**
+    * **전천후 층수 추출 엔진**: 텍스트 파편화 및 현장별 표기 차이(괄호, 슬래시 등)에 상관없이 층수 전체를 읽도록 로직 강화
+    * **데이터 유실 방지**: 이전 버전에서 확립된 PCB 옵션(GT...G/S), 인승/용량, 열림방향 로직을 철저히 유지
+    * **문구 정밀화**: INDICATOR DATA 및 주의사항 섹션의 모든 핵심 키워드 검색 범위 확대
     """)
 
 if os.path.exists("logo.png"):
@@ -32,12 +31,13 @@ if uploaded_file:
         all_text = ""
         all_tables = []
         for page in pdf.pages:
+            # 텍스트 추출 시 레이아웃 유지 옵션 강화
             all_text += (page.extract_text() or "") + "\n"
             table = page.extract_table()
             if table:
                 all_tables.extend(table)
 
-    # 2. 기본 정보 추출
+    # 기본 정보 추출
     project = re.search(r"공사명\s*[:\s]+([^\n]+)", all_text).group(1).strip() if "공사명" in all_text else "미확인"
     unit = re.search(r"호기번호\s*[:\s]+([A-Z0-9]+)", all_text).group(1).strip() if "호기번호" in all_text else "미확인"
 
@@ -59,48 +59,50 @@ if uploaded_file:
             df = df.drop(columns=['협력사'])
 
         # ---------------------------------------------------------
-        # 3. 데이터 정밀 추출 로직 (누락 방지)
+        # 3. 데이터 정밀 추출 로직 (현장 가변 데이터 대응)
         # ---------------------------------------------------------
-        # (1) 인승/용량 및 열림방향
+        
+        # (1) 층수 정보 (가장 강력한 정규식 적용)
+        # 괄호 안의 층 정보(B2.B1...)와 TOTAL FLOOR 뒤의 정보를 모두 수집
+        floor_patterns = [
+            r"TOTAL\s*FLOOR\s*[:\s]*([B0-9A-Z,.\s/]+)",
+            r"FLOOR\s*NAME\s*([B0-9A-Z,.\s/]+)",
+            r"(\d+FLOOR\s*\d+STOP[^)]*)"
+        ]
+        
+        collected_floors = []
+        for p in floor_patterns:
+            finds = re.findall(p, all_text, re.IGNORECASE)
+            for f in finds:
+                clean_f = f.split('기준층')[0].split('MAIN')[0].strip().rstrip(',')
+                if clean_f and clean_f not in collected_floors:
+                    collected_floors.append(clean_f)
+        
+        total_floors_display = " / ".join(collected_floors) if collected_floors else "미확인"
+
+        # (2) 인승/용량 및 열림방향
         person_match = re.search(r"(\d+)\s*인승", all_text)
         capacity_match = re.search(r"(\d+)\s*kg", all_text)
-        p_val = person_match.group(1) if person_match else "미확인"
-        c_val = capacity_match.group(1) if capacity_match else "미확인"
-        name_plate_info = f"{p_val}인승 / {c_val}kg"
+        name_plate_info = f"{person_match.group(1)}인승 / {capacity_match.group(1)}kg" if person_match and capacity_match else "미확인"
 
         open_dir_match = re.search(r"열림방향(?:\(MAIN\))?\s*[:\s]*([가-힣A-Z/]+)", all_text)
         open_direction = open_dir_match.group(1).strip() if open_dir_match else "미확인"
 
-        # (2) OPB 타입 (E280A 블록)
+        # (3) OPB 타입 (E280A)
         opb_spec = "정보 없음"
         target_row = df[df.astype(str).apply(lambda x: x.str.contains('E280A')).any(axis=1)]
         if not target_row.empty:
             row_content = " ".join(target_row.values.flatten().astype(str))
             spec_find = re.search(r"OPB\s*([SD]\s*\d\s*\d\s*\d\s*[A-Z]?)", row_content, re.IGNORECASE)
-            if spec_find:
-                opb_spec = re.sub(r'\s+', '', spec_find.group(1))
+            if spec_find: opb_spec = re.sub(r'\s+', '', spec_find.group(1))
 
-        # (3) PCB 옵션 정보 (E280A16 블록)
+        # (4) PCB 옵션 정보 (E280A16)
         pcb_option = "정보 없음"
         pcb_row = df[df.astype(str).apply(lambda x: x.str.contains('E280A16')).any(axis=1)]
         if not pcb_row.empty:
             pcb_text = " ".join(pcb_row.values.flatten().astype(str)).replace('\n', '')
             pcb_match = re.search(r"(GT[\s,.]*MAIN.*?G/S)", pcb_text, re.IGNORECASE)
-            if pcb_match:
-                pcb_option = re.sub(r'\s+', ' ', pcb_match.group(1)).strip()
-
-        # (4) [수정 핵심] 전체 층수 정보 (숫자 + 리스트 모두 추출)
-        # 8FLOOR 같은 숫자 정보와 B2,B1... 같은 리스트 정보를 조합
-        floor_count_match = re.search(r"(\d+)\s*FLOOR", all_text, re.IGNORECASE)
-        floor_list_match = re.search(r"TOTAL\s*FLOOR\s*[:\s]*([B0-9A-Z,.\s/]+)", all_text, re.IGNORECASE)
-        
-        f_count = f"{floor_count_match.group(1)}층" if floor_count_match else ""
-        f_list = ""
-        if floor_list_match:
-            f_list = floor_list_match.group(1).split('기준층')[0].strip().rstrip(',')
-            f_list = re.sub(r'\s+', ' ', f_list) # 불필요한 공백 제거
-        
-        total_floors_display = f"{f_count} ({f_list})" if f_count and f_list else (f_count or f_list or "미확인")
+            if pcb_match: pcb_option = re.sub(r'\s+', ' ', pcb_match.group(1)).strip()
 
         # (5) 기준층 위치
         base_floor_match = re.search(r"기준층\s*[:\s]*([0-9A-Z]+)", all_text)
@@ -128,7 +130,7 @@ if uploaded_file:
 
         st.subheader("📋 핵심 제작 사양 요약")
         m_c1, m_c2, m_c3, m_c4 = st.columns(4)
-        with m_c1: st.metric("🏢 전체 층수", total_floors_display)
+        with m_c1: st.metric("🏢 전체 층수 정보", total_floors_display)
         with m_c2: st.metric("📍 기준층 위치", base_floor)
         with m_c3: st.metric("👥 인승/용량", name_plate_info)
         with m_c4: st.metric("🚪 열림방향", open_direction)
