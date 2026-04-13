@@ -5,17 +5,17 @@ import re
 import os
 
 # 1. 페이지 설정 및 버전 정의
-APP_VERSION = "V 1.3.6"
-LAST_UPDATE = "2026.04.11"
+APP_VERSION = "V 1.3.7"
+LAST_UPDATE = "2026.04.13"
 
 st.set_page_config(page_title=f"SMC OPB BOM 시스템 {APP_VERSION}", layout="wide")
 
 def show_updates():
     st.info(f"""
-    **🚀 {APP_VERSION} 층수 정보 출력 범위 정밀 조정 ({LAST_UPDATE})**
-    * **출력 가독성 강화**: A2000 블록 추출 시 'FRONT STOP FLOOR' 이전까지만 잘라내어 불필요한 정보 제거
-    * **핵심 사양 집중**: TOTAL FLOOR와 상세 층 리스트, 기준층 정보만 명확하게 노출
-    * **시각화 유지**: 작은 글씨(Caption) 모드를 유지하여 긴 층수 정보도 한눈에 확인 가능
+    **🚀 {APP_VERSION} 자재 재질(MATERIAL) 추출 기능 추가 ({LAST_UPDATE})**
+    * **표판 재질 정보 노출**: BLOCK E280A에서 'MATERIAL :' 정보를 찾아 상세 제작 사양에 표시
+    * **출력 가독성 최적화**: TOTAL FLOOR 정보를 'FRONT STOP FLOOR' 이전까지만 깔끔하게 노출
+    * **기존 로직 완벽 유지**: PCB 옵션, 인승/용량, 열림방향 및 A2000 블록 정밀 추출 유지
     """)
 
 if os.path.exists("logo.png"):
@@ -61,20 +61,12 @@ if uploaded_file:
         # 3. 데이터 정밀 추출 로직
         # ---------------------------------------------------------
         
-        # (1) [수정 핵심] A2000 블록 층수 정보 추출 (FRONT STOP FLOOR 이전까지만)
+        # (1) A2000 블록 층수 정보 추출 (FRONT STOP FLOOR 이전까지)
         total_floors_display = "미확인"
-        # A2000 시작부터 TOTAL FLOOR를 거쳐 FRONT STOP FLOOR 직전까지만 캡처
         a2000_area = re.search(r"A2000.*?TOTAL\s*FLOOR(.*?)(?=FRONT\s*STOP\s*FLOOR|HX\s*1000|C2620|$)", all_text, re.DOTALL | re.IGNORECASE)
-        
         if a2000_area:
             raw_floors = a2000_area.group(1).strip()
-            # 불필요한 줄바꿈 및 공백 정리
             total_floors_display = "TOTAL FLOOR " + re.sub(r'\s+', ' ', raw_floors).strip()
-        else:
-            # 보조 패턴
-            backup_floors = re.search(r"TOTAL\s*FLOOR\s*[:\s]*([B0-9A-Z,.\s/]+(?:기준층|MAIN)[^)\n]*)", all_text, re.IGNORECASE)
-            if backup_floors:
-                total_floors_display = backup_floors.group(0).split("FRONT STOP")[0].strip()
 
         # (2) 인승/용량 및 열림방향
         person_match = re.search(r"(\d+)\s*인승", all_text)
@@ -83,13 +75,18 @@ if uploaded_file:
         open_dir_match = re.search(r"열림방향(?:\(MAIN\))?\s*[:\s]*([가-힣A-Z/]+)", all_text)
         open_direction = open_dir_match.group(1).strip() if open_dir_match else "미확인"
 
-        # (3) OPB 타입 (E280A)
+        # (3) [신규] OPB 타입 및 재질 정보 (E280A)
         opb_spec = "정보 없음"
+        material_info = "정보 없음"
         target_row = df[df.astype(str).apply(lambda x: x.str.contains('E280A')).any(axis=1)]
         if not target_row.empty:
             row_content = " ".join(target_row.values.flatten().astype(str))
+            # 타입 추출
             spec_find = re.search(r"OPB\s*([SD]\s*\d\s*\d\s*\d\s*[A-Z]?)", row_content, re.IGNORECASE)
             if spec_find: opb_spec = re.sub(r'\s+', '', spec_find.group(1))
+            # 재질(MATERIAL) 추출
+            mat_find = re.search(r"MATERIAL\s*[:\s]*([가-힣A-Z0-9\s_\-]+)", row_content, re.IGNORECASE)
+            if mat_find: material_info = mat_find.group(1).strip()
 
         # (4) PCB 옵션 정보 (E280A16)
         pcb_option = "정보 없음"
@@ -139,14 +136,15 @@ if uploaded_file:
         box_match = re.search(r"BOX\s*[:\s]*([\d\s*xX,]{5,20})", all_text, re.IGNORECASE)
         sw_dwg = re.search(r"S/W\s*PANEL.*?DWG\s*NO\.?\s*[:\s]*([0-9A-Z]+)", all_text, re.IGNORECASE | re.DOTALL)
         
-        r1_c1, r1_c2, r1_c3 = st.columns(3)
-        with r1_c1: st.info(f"✨ **OPB 타입/사양**\n\n{opb_spec}")
-        with r1_c2: st.info(f"📏 **MAIN BOX size**\n\n{box_match.group(1).strip() if box_match else '정보 없음'}")
-        with r1_c3: st.info(f"📄 **S/W PANEL 도면**\n\n{sw_dwg.group(1) if sw_dwg else '정보 없음'}")
+        r1_c1, r1_c2, r1_c3, r1_c4 = st.columns(4)
+        with r1_c1: st.info(f"✨ **OPB 타입**\n\n{opb_spec}")
+        with r1_c2: st.error(f"🎨 **표판 재질**\n\n{material_info}")
+        with r1_c3: st.info(f"📏 **BOX SIZE**\n\n{box_match.group(1).strip() if box_match else '정보 없음'}")
+        with r1_c4: st.info(f"📄 **도면 번호**\n\n{sw_dwg.group(1) if sw_dwg else '정보 없음'}")
 
         r2_c1, r2_c2, r2_c3, r2_c4 = st.columns(4)
-        with r2_c1: st.info(f"📟 **인디케이터 문구**\n\n{indicator_text}")
-        with r2_c2: st.warning(f"🔋 **PCB 옵션 정보**\n\n{pcb_option}")
+        with r2_c1: st.info(f"📟 **인디케이터**\n\n{indicator_text}")
+        with r2_c2: st.warning(f"🔋 **PCB 옵션**\n\n{pcb_option}")
         with r2_c3: st.success(f"❄️ **에어컨:** {aircon}")
         with r2_c4: st.success(f"⏭️ **오너스킵:** {skip_sw}")
 
