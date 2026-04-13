@@ -5,17 +5,17 @@ import re
 import os
 
 # 1. 페이지 설정 및 버전 정의
-APP_VERSION = "V 1.3.8"
+APP_VERSION = "V 1.3.9"
 LAST_UPDATE = "2026.04.13"
 
 st.set_page_config(page_title=f"SMC OPB BOM 시스템 {APP_VERSION}", layout="wide")
 
 def show_updates():
     st.info(f"""
-    **🚀 {APP_VERSION} 재질(MATERIAL) 추출 엔진 정밀화 ({LAST_UPDATE})**
-    * **전천후 재질 인식**: MATERIAL 단어 뒤에 줄바꿈이나 괄호가 있어도 끝까지 추적하여 추출 (스테인레스 헤어라인 등)
-    * **A2000 층수 최적화**: 'FRONT STOP FLOOR' 이전까지만 출력하여 불필요한 노이즈 제거
-    * **고정 데이터 매핑**: PCB 옵션(GT...G/S), 인승/용량, 열림방향 등 기존 모든 추출 성공 로직 유지
+    **🚀 {APP_VERSION} 재질(MATERIAL) 추출 로직 최종 보정 ({LAST_UPDATE})**
+    * **표 외부 텍스트 스캔**: 표 안에 있지 않은 독립된 'MATERIAL' 문구도 인식하도록 탐색 로직 강화
+    * **정규식 정밀화**: 'MATERIAL:' 뒤에 오는 복합 명칭(한글, 영문, 특수문자 포함)을 끝까지 추적
+    * **기존 데이터 보존**: 층수 정보(FRONT STOP 이전), PCB 옵션, 인승/용량 등 이전의 모든 성공 로직 유지
     """)
 
 if os.path.exists("logo.png"):
@@ -61,7 +61,7 @@ if uploaded_file:
         # 3. 데이터 정밀 추출 로직
         # ---------------------------------------------------------
         
-        # (1) A2000 블록 층수 정보 추출 (FRONT STOP FLOOR 이전까지)
+        # (1) A2000 블록 층수 정보 (FRONT STOP FLOOR 이전까지)
         total_floors_display = "미확인"
         a2000_area = re.search(r"A2000.*?TOTAL\s*FLOOR(.*?)(?=FRONT\s*STOP\s*FLOOR|HX\s*1000|C2620|$)", all_text, re.DOTALL | re.IGNORECASE)
         if a2000_area:
@@ -75,23 +75,19 @@ if uploaded_file:
         open_dir_match = re.search(r"열림방향(?:\(MAIN\))?\s*[:\s]*([가-힣A-Z/]+)", all_text)
         open_direction = open_dir_match.group(1).strip() if open_dir_match else "미확인"
 
-        # (3) [수정] OPB 타입 및 재질 정보 (유연성 강화)
-        opb_spec = "정보 없음"
+        # (3) [최종 보정] 재질(MATERIAL) 및 OPB 타입 추출
         material_info = "정보 없음"
-        
-        # E280A 블록 행 찾기
-        target_row = df[df.astype(str).apply(lambda x: x.str.contains('E280A')).any(axis=1)]
-        row_content = " ".join(target_row.values.flatten().astype(str)) if not target_row.empty else ""
-        
-        # (A) 타입 추출
-        spec_find = re.search(r"OPB\s*([SD]\s*\d\s*\d\s*\d\s*[A-Z]?)", row_content, re.IGNORECASE)
-        if spec_find: opb_spec = re.sub(r'\s+', '', spec_find.group(1))
-        
-        # (B) 재질(MATERIAL) 추출 - 텍스트 전체에서 가장 근접한 정보 검색
-        # MATERIAL: 뒤에 오는 한글/영문/특수문자 조합을 광범위하게 수집
-        mat_search = re.search(r"MATERIAL\s*[:\s]*([가-힣A-Z0-9\s_\-\(\)]+)", all_text, re.IGNORECASE)
+        # 문서 전체에서 MATERIAL 키워드 검색 (줄바꿈 허용)
+        mat_search = re.search(r"MATERIAL\s*[:\s]*([가-힣A-Z0-9\s_\-\(\)\.]+)", all_text, re.IGNORECASE)
         if mat_search:
-            material_info = mat_search.group(1).split('\n')[0].strip()
+            material_info = mat_search.group(1).strip().split('\n')[0]
+
+        opb_spec = "정보 없음"
+        target_row = df[df.astype(str).apply(lambda x: x.str.contains('E280A')).any(axis=1)]
+        if not target_row.empty:
+            row_content = " ".join(target_row.values.flatten().astype(str))
+            spec_find = re.search(r"OPB\s*([SD]\s*\d\s*\d\s*\d\s*[A-Z]?)", row_content, re.IGNORECASE)
+            if spec_find: opb_spec = re.sub(r'\s+', '', spec_find.group(1))
 
         # (4) PCB 옵션 정보 (E280A16)
         pcb_option = "정보 없음"
@@ -101,11 +97,9 @@ if uploaded_file:
             pcb_match = re.search(r"(GT[\s,.]*MAIN.*?G/S)", pcb_text, re.IGNORECASE)
             if pcb_match: pcb_option = re.sub(r'\s+', ' ', pcb_match.group(1)).strip()
 
-        # (5) 기준층 위치
+        # (5) 기준층 위치 및 인디케이터
         base_floor_match = re.search(r"기준층\s*[:\s]*([0-9A-Z]+)", all_text)
         base_floor = base_floor_match.group(1).strip() if base_floor_match else "미확인"
-
-        # (6) 인디케이터 문구 및 취부 사양
         indicator_match = re.search(r"INDICATOR\s*DATA\s*[:\s]*([^\n]+)", all_text, re.IGNORECASE)
         indicator_text = indicator_match.group(1).strip() if indicator_match else "정보 없음"
         aircon = "✅ 적용" if any(k in all_text for k in ["AIR-CON", "에어컨"]) else "❌ 미적용"
