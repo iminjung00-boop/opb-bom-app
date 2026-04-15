@@ -5,17 +5,44 @@ import re
 import os
 
 # 1. 페이지 설정 및 버전 정의
-APP_VERSION = "V 1.4.5 (CN)"
+APP_VERSION = "V 1.4.6 (CN_Full)"
 LAST_UPDATE = "2026.04.13"
 
 st.set_page_config(page_title=f"SMC OPB BOM 系统 {APP_VERSION}", layout="wide")
 
+# [중국어 번역 사전 정의]
+TRANSLATION_DICT = {
+    "BUTTON": "按钮 (Button)",
+    "버튼": "按钮 (Button)",
+    "PC BOARD": "电路板 (PCB)",
+    "BOARD": "电路板 (Board)",
+    "CABLE": "电缆 (Cable)",
+    "ASSY": "组件 (Assy)",
+    "INDICATOR": "显示器 (Indicator)",
+    "PHONE": "电话/对讲 (Phone)",
+    "STCKER": "贴纸 (Sticker)",
+    "HALL": "厅门 (Hall)",
+    "DISABLED": "残疾人 (Disabled)",
+    "BRAILLE": "盲文 (Braille)",
+    "BOX": "底盒 (Box)",
+    "COVER": "盖板 (Cover)",
+    "SCREW": "螺丝 (Screw)",
+}
+
+def translate_content(text):
+    if not isinstance(text, str): return text
+    translated = text
+    for ko, cn in TRANSLATION_DICT.items():
+        if ko in translated.upper():
+            translated = translated.upper().replace(ko, cn)
+    return translated
+
 def show_updates():
     st.info(f"""
-    **🚀 {APP_VERSION} 语言支持更新 (Language Update)**
-    * **界面中文化**: 所有的主要菜单和项目名称已转换为中文，便于在海外使用。
-    * **材质提取优化**: 保持 기존 '* MATERIAL :' 格式，确保生产信息准确。
-    * **核心逻辑维持**: 楼层信息、PCB选项、载重/人乘等提取逻辑保持不变。
+    **🚀 {APP_VERSION} 材料清单中文化更新 (BOM Content Translation)**
+    * **清单内容翻译**: 自动识别并翻译材料清单内的核心关键词（如按钮、电路板、电缆等）。
+    * **多语言对照**: 采用‘中文 (原语)’形式显示，确保现场作业不会产生混淆。
+    * **界面全面优化**: 所有的表格标题和系统提示均已完成中文化。
     """)
 
 if os.path.exists("logo.png"):
@@ -57,6 +84,12 @@ if uploaded_file:
         if '협력사' in df.columns:
             df = df.drop(columns=['협력사'])
 
+        # [리스트 내용 중국어 변환 적용]
+        if '자재내역' in df.columns:
+            df['자재내역'] = df['자재내역'].apply(translate_content)
+        if 'SPEC' in df.columns:
+            df['SPEC'] = df['SPEC'].apply(translate_content)
+
         # ---------------------------------------------------------
         # 3. 데이터 정밀 추출 로직
         # ---------------------------------------------------------
@@ -75,7 +108,7 @@ if uploaded_file:
         open_dir_match = re.search(r"열림방향(?:\(MAIN\))?\s*[:\s]*([가-힣A-Z/]+)", all_text)
         open_direction = open_dir_match.group(1).strip() if open_dir_match else "未确认"
 
-        # (3) MATERIAL 재질 정보 (요청 포맷 유지)
+        # (3) MATERIAL 재질 정보
         material_info = "无数据"
         lines = all_text.split('\n')
         for i, line in enumerate(lines):
@@ -85,7 +118,7 @@ if uploaded_file:
                 if mat_match:
                     found_mat = mat_match.group(1).strip()
                     if any(k in found_mat for k in ["스테인레스", "헤어라인", "미러", "SUS", "H/L", "S/L"]):
-                        material_info = f"* MATERIAL : {found_mat}"
+                        material_info = f"* MATERIAL : {translate_content(found_mat)}"
                         break
 
         # (4) OPB 타입
@@ -110,7 +143,7 @@ if uploaded_file:
         indicator_match = re.search(r"INDICATOR\s*DATA\s*[:\s]*([^\n]+)", all_text, re.IGNORECASE)
         indicator_text = indicator_match.group(1).strip() if indicator_match else "无数据"
 
-        # 4. 화면 출력 (중국어 변환)
+        # 4. 화면 출력
         st.subheader("⚠️ 生产关键注意事项 (Key Notes)")
         c_w1, c_w2 = st.columns(2)
         with c_w1:
@@ -153,9 +186,16 @@ if uploaded_file:
 
         st.divider()
 
+        # [테이블 헤더도 중국어로 변경]
+        df_display = df.copy()
+        df_display.columns = [
+            "区块(Block)", "材料编号(No)", "材料明细(Description)", 
+            "规格(Spec)", "尺寸(Size)", "图纸编号(DWG No)"
+        ] if len(df.columns) == 6 else df.columns
+
         st.subheader("🔘 主要材料投入明细 (核心)")
-        target_mask = df.astype(str).apply(lambda x: x.str.contains('BUTTON|버튼|HIP|SJ21|PCB|BOARD|E280|E281|E282', case=False, na=False)).any(axis=1)
-        st.table(df[target_mask])
+        target_mask = df.astype(str).apply(lambda x: x.str.contains('BUTTON|按钮|HIP|SJ21|电路板|BOARD|E280|E281|E282', case=False, na=False)).any(axis=1)
+        st.table(df_display[target_mask])
 
         st.subheader("📦 完整材料清单 (Full BOM)")
-        st.dataframe(df, use_container_width=True, hide_index=True)
+        st.dataframe(df_display, use_container_width=True, hide_index=True)
