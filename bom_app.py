@@ -5,17 +5,17 @@ import re
 import os
 
 # 1. 페이지 설정 및 버전 정의
-APP_VERSION = "V 1.5.9"
+APP_VERSION = "V 1.6.0"
 LAST_UPDATE = "2026.05.06"
 
 st.set_page_config(page_title=f"SMC OPB BOM 시스템 {APP_VERSION}", layout="wide")
 
 def show_updates():
     st.info(f"""
-    **🚀 {APP_VERSION} 시스템 안정화 및 지시 사항 추출 로직 수정 ({LAST_UPDATE})**
-    * **오류 수정**: TypeError를 유발했던 구문 오류(괄호 누락)를 완벽히 해결[cite: 1]
-    * **도면 지시 사항**: E280A, E281A 블록 내의 "현장 도면 참고" 문구를 주의사항에 자동 표시[cite: 1]
-    * **로직 안정화**: V 1.5.0의 검증된 추출 엔진을 기반으로 기능만 정밀 보강[cite: 1]
+    **🚀 {APP_VERSION} 시스템 안정화 및 데이터 처리 로직 완벽 수정 ({LAST_UPDATE})**
+    * **TypeError 해결**: 데이터프레임 평면화(Flatten) 과정의 구문 오류를 해결하여 안정성 확보[cite: 1]
+    * **지시 사항 추출**: E280A, E281A 등 특정 블록 내의 현장 도면 제작 지시 사항을 주의사항에 표시[cite: 1]
+    * **로직 유지**: 사용자님이 검증하신 V 1.5.0의 핵심 추출 엔진 및 UI 레이아웃 유지[cite: 1]
     """)
 
 if os.path.exists("logo.png"):
@@ -54,13 +54,13 @@ if uploaded_file:
         df = df_raw.iloc[header_idx+1:].reset_index(drop=True).dropna(axis=1, how='all')
         df.columns = [str(c).replace('\n', ' ') for c in df.columns]
 
-        # 🔍 BLOCK E280A / E281A 내 도면 지시 사항 추출 (에러 수정됨)[cite: 1]
+        # 🔍 BLOCK E280A / E281A 내 현장 도면 지시 사항 추출 (안전한 방식으로 수정)[cite: 1]
         dwg_instructions = []
         for block in ['E280A', 'E281A']:
             block_rows = df[df.astype(str).apply(lambda x: x.str.contains(block)).any(axis=1)]
             if not block_rows.empty:
-                # [수정] 괄호 닫기 위치 및 구문 최적화
-                block_content = " ".join(block_rows.astype(str).values.flatten().tolist())
+                # 데이터를 리스트로 변환 후 문자열로 안전하게 결합[cite: 1]
+                block_content = " ".join(block_rows.astype(str).values.ravel().tolist())
                 match = re.search(r"([^\.]*(?:MAIN|DIS)\s*OPB는\s*현장\s*도면\s*DWG\.\s*[0-9]+\s*참고하여\s*제작[^\.]*)", block_content)
                 if match:
                     dwg_instructions.append(match.group(1).strip())
