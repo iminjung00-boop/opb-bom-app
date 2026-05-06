@@ -5,17 +5,17 @@ import re
 import os
 
 # 1. 페이지 설정 및 버전 정의
-APP_VERSION = "V 1.6.1"
+APP_VERSION = "V 1.6.2"
 LAST_UPDATE = "2026.05.06"
 
 st.set_page_config(page_title=f"SMC OPB BOM 시스템 {APP_VERSION}", layout="wide")
 
 def show_updates():
     st.info(f"""
-    **🚀 {APP_VERSION} 시스템 안정성 강화 및 에러 원천 차단 ({LAST_UPDATE})**
-    * **TypeError 완벽 해결**: 오류를 유발하던 데이터프레임 변환 로직을 제거하고 텍스트 직접 검색 방식으로 변경하여 에러 발생 가능성 제거
-    * **현장 도면 지시 사항**: E280A, E281A 블록 하단의 현장 도면(DWG) 제작 지침을 주의사항 섹션에 정확히 표출
-    * **로직 원복 및 유지**: 사용자님이 신뢰하시는 V 1.5.0의 데이터 추출 로직을 기반으로 기능 통합
+    **🚀 {APP_VERSION} 에어컨 및 PCB 상세 사양 UI 복구 ({LAST_UPDATE})**
+    * **PCB 옵션 정밀 추출**: E280A16 블록에서 GT.MAIN 등 상세 PCB 사양 추출 로직 복구
+    * **에어컨/오너스킵**: 문서 내 키워드를 감지하여 적용 여부를 대시보드에 표시
+    * **에러 원천 차단**: 이전 버전의 텍스트 스캔 방식을 유지하여 TypeError 방지
     """)
 
 if os.path.exists("logo.png"):
@@ -43,12 +43,10 @@ if uploaded_file:
 
     st.header(f"📊 {project} ({unit})")
 
-    # 🔍 [수정] 에러 없는 텍스트 기반 지시 사항 추출 로직[cite: 1]
+    # 🔍 현장 도면 지시 사항 추출 (V 1.6.1 로직)[cite: 1]
     dwg_instructions = []
-    # "현장 도면 DWG. 숫자 참고하여 제작" 패턴을 문서 전체 텍스트에서 검색
     matches = re.findall(r"([^\.\n]*(?:MAIN|DIS)\s*OPB는\s*현장\s*도면\s*DWG\.\s*[0-9]+\s*참고하여\s*제작[^\.\n]*)", all_text)
     if matches:
-        # 중복 제거 후 리스트에 추가
         dwg_instructions = list(set([m.strip() for m in matches]))
 
     if all_tables:
@@ -63,7 +61,10 @@ if uploaded_file:
         df = df_raw.iloc[header_idx+1:].reset_index(drop=True).dropna(axis=1, how='all')
         df.columns = [str(c).replace('\n', ' ') for c in df.columns]
 
-        # 3. 데이터 정밀 추출 로직 (V 1.5.0 기반)[cite: 1]
+        # ---------------------------------------------------------
+        # 3. 데이터 정밀 추출 로직 (V 1.5.0 기반 복구)[cite: 1]
+        # ---------------------------------------------------------
+        
         # (1) A2000 층수 정보
         total_floors_display = "미확인"
         a2000_area = re.search(r"A2000.*?TOTAL\s*FLOOR(.*?)(?=FRONT\s*STOP\s*FLOOR|HX\s*1000|C2620|$)", all_text, re.DOTALL | re.IGNORECASE)
@@ -79,11 +80,21 @@ if uploaded_file:
                     material_info = f"* MATERIAL : {mat_match.group(1).strip()}"
                     break
 
+        # (3) PCB 옵션 및 에어컨 적용 여부[cite: 1]
+        pcb_option = "정보 없음"
+        pcb_row = df[df.astype(str).apply(lambda x: x.str.contains('E280A16')).any(axis=1)]
+        if not pcb_row.empty:
+            pcb_text = " ".join(pcb_row.values.flatten().astype(str)).replace('\n', '')
+            pcb_match = re.search(r"(GT[\s,.]*MAIN.*?G/S)", pcb_text, re.IGNORECASE)
+            if pcb_match: pcb_option = re.sub(r'\s+', ' ', pcb_match.group(1)).strip()
+
+        aircon = "✅ 적용" if any(k in all_text.upper() for k in ["AIR-CON", "에어컨"]) else "❌ 미적용"
+        skip_sw = "✅ 적용" if any(k in all_text.upper() for k in ["SKIP S/W", "오너스킵"]) else "❌ 미적용"
+
         # 4. 화면 출력 (주의사항)[cite: 1]
         st.subheader("⚠️ 생산 핵심 주의사항")
         c_w1, c_w2 = st.columns(2)
         with c_w1:
-            # 텍스트 기반으로 찾은 지시 사항 출력
             if dwg_instructions:
                 for ins in dwg_instructions:
                     st.error(f"📐 **제작 지침: {ins}**")
@@ -112,20 +123,29 @@ if uploaded_file:
 
         st.divider()
 
-        # 상세 제작 사양[cite: 1]
+        # 🎛️ 상세 제작 사양 (에어컨/PCB 복구)[cite: 1]
         r1_c1, r1_c2, r1_c3, r1_c4 = st.columns(4)
         with r1_c1:
-            opb_spec = "정보 없음"
+            opb_type = "정보 없음"
             type_f = re.search(r"OPB\s*([SD]\s*\d\s*\d\s*\d\s*[A-Z]?)", all_text, re.IGNORECASE)
-            if type_f: opb_spec = re.sub(r'\s+', '', type_f.group(1))
-            st.info(f"✨ **OPB 타입**\n\n{opb_spec}")
+            if type_f: opb_type = re.sub(r'\s+', '', type_f.group(1))
+            st.info(f"✨ **OPB 타입**\n\n{opb_type}")
         with r1_c2: st.error(f"🎨 **표판 재질 사양**\n\n{material_info}") 
         with r1_c3: 
-            box_s = re.search(r"BOX\s*[:\s]*([\d\s*xX,]{5,20})", all_text, re.IGNORECASE)
-            st.info(f"📏 **BOX SIZE**\n\n{box_s.group(1).strip() if box_s else '정보 없음'}")
+            b_size = re.search(r"BOX\s*[:\s]*([\d\s*xX,]{5,20})", all_text, re.IGNORECASE)
+            st.info(f"📏 **BOX SIZE**\n\n{b_size.group(1).strip() if b_size else '정보 없음'}")
         with r1_c4: 
             sw_d = re.search(r"S/W\s*PANEL.*?DWG\s*NO\.?\s*[:\s]*([0-9A-Z]+)", all_text, re.IGNORECASE | re.DOTALL)
             st.info(f"📄 **도면 번호**\n\n{sw_d.group(1) if sw_d else '정보 없음'}")
+
+        # [추가된 PCB/에어컨 대시보드][cite: 1]
+        r2_c1, r2_c2, r2_c3, r2_c4 = st.columns(4)
+        with r2_c1:
+            indicator_match = re.search(r"INDICATOR\s*DATA\s*[:\s]*([^\n]+)", all_text, re.IGNORECASE)
+            st.info(f"📟 **인디케이터**\n\n{indicator_match.group(1).strip() if indicator_match else '정보 없음'}")
+        with r2_c2: st.warning(f"🔋 **PCB 옵션**\n\n{pcb_option}")
+        with r2_c3: st.success(f"❄️ **에어컨:** {aircon}")
+        with r2_c4: st.success(f"⏭️ **오너스킵:** {skip_sw}")
 
         st.divider()
 
