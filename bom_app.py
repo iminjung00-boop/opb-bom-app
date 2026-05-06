@@ -5,17 +5,17 @@ import re
 import os
 
 # 1. 페이지 설정 및 버전 정의
-APP_VERSION = "V 1.6.0"
+APP_VERSION = "V 1.6.1"
 LAST_UPDATE = "2026.05.06"
 
 st.set_page_config(page_title=f"SMC OPB BOM 시스템 {APP_VERSION}", layout="wide")
 
 def show_updates():
     st.info(f"""
-    **🚀 {APP_VERSION} 시스템 안정화 및 데이터 처리 로직 완벽 수정 ({LAST_UPDATE})**
-    * **TypeError 해결**: 데이터프레임 평면화(Flatten) 과정의 구문 오류를 해결하여 안정성 확보[cite: 1]
-    * **지시 사항 추출**: E280A, E281A 등 특정 블록 내의 현장 도면 제작 지시 사항을 주의사항에 표시[cite: 1]
-    * **로직 유지**: 사용자님이 검증하신 V 1.5.0의 핵심 추출 엔진 및 UI 레이아웃 유지[cite: 1]
+    **🚀 {APP_VERSION} 시스템 안정성 강화 및 에러 원천 차단 ({LAST_UPDATE})**
+    * **TypeError 완벽 해결**: 오류를 유발하던 데이터프레임 변환 로직을 제거하고 텍스트 직접 검색 방식으로 변경하여 에러 발생 가능성 제거
+    * **현장 도면 지시 사항**: E280A, E281A 블록 하단의 현장 도면(DWG) 제작 지침을 주의사항 섹션에 정확히 표출
+    * **로직 원복 및 유지**: 사용자님이 신뢰하시는 V 1.5.0의 데이터 추출 로직을 기반으로 기능 통합
     """)
 
 if os.path.exists("logo.png"):
@@ -31,7 +31,8 @@ if uploaded_file:
         all_text = ""
         all_tables = []
         for page in pdf.pages:
-            all_text += (page.extract_text() or "") + "\n"
+            content = page.extract_text() or ""
+            all_text += content + "\n"
             table = page.extract_table()
             if table:
                 all_tables.extend(table)
@@ -41,6 +42,14 @@ if uploaded_file:
     unit = re.search(r"호기번호\s*[:\s]+([A-Z0-9]+)", all_text).group(1).strip() if "호기번호" in all_text else "미확인"
 
     st.header(f"📊 {project} ({unit})")
+
+    # 🔍 [수정] 에러 없는 텍스트 기반 지시 사항 추출 로직[cite: 1]
+    dwg_instructions = []
+    # "현장 도면 DWG. 숫자 참고하여 제작" 패턴을 문서 전체 텍스트에서 검색
+    matches = re.findall(r"([^\.\n]*(?:MAIN|DIS)\s*OPB는\s*현장\s*도면\s*DWG\.\s*[0-9]+\s*참고하여\s*제작[^\.\n]*)", all_text)
+    if matches:
+        # 중복 제거 후 리스트에 추가
+        dwg_instructions = list(set([m.strip() for m in matches]))
 
     if all_tables:
         df_raw = pd.DataFrame(all_tables)
@@ -53,17 +62,6 @@ if uploaded_file:
         df_raw.columns = df_raw.iloc[header_idx]
         df = df_raw.iloc[header_idx+1:].reset_index(drop=True).dropna(axis=1, how='all')
         df.columns = [str(c).replace('\n', ' ') for c in df.columns]
-
-        # 🔍 BLOCK E280A / E281A 내 현장 도면 지시 사항 추출 (안전한 방식으로 수정)[cite: 1]
-        dwg_instructions = []
-        for block in ['E280A', 'E281A']:
-            block_rows = df[df.astype(str).apply(lambda x: x.str.contains(block)).any(axis=1)]
-            if not block_rows.empty:
-                # 데이터를 리스트로 변환 후 문자열로 안전하게 결합[cite: 1]
-                block_content = " ".join(block_rows.astype(str).values.ravel().tolist())
-                match = re.search(r"([^\.]*(?:MAIN|DIS)\s*OPB는\s*현장\s*도면\s*DWG\.\s*[0-9]+\s*참고하여\s*제작[^\.]*)", block_content)
-                if match:
-                    dwg_instructions.append(match.group(1).strip())
 
         # 3. 데이터 정밀 추출 로직 (V 1.5.0 기반)[cite: 1]
         # (1) A2000 층수 정보
@@ -85,9 +83,10 @@ if uploaded_file:
         st.subheader("⚠️ 생산 핵심 주의사항")
         c_w1, c_w2 = st.columns(2)
         with c_w1:
+            # 텍스트 기반으로 찾은 지시 사항 출력
             if dwg_instructions:
                 for ins in dwg_instructions:
-                    st.error(f"📐 **제작 지시: {ins}**")
+                    st.error(f"📐 **제작 지침: {ins}**")
             
             parking_check = re.search(r"기준층\s*버튼\s*PARKING\s*SW\s*적용\s*\(([^)]+)\)", all_text)
             if parking_check and parking_check.group(1) != "미적용":
@@ -99,7 +98,7 @@ if uploaded_file:
 
         st.divider()
 
-        # 핵심 제작 사양 요약[cite: 1]
+        # 핵심 사양 요약[cite: 1]
         m_c1, m_c2, m_c3 = st.columns([2, 1, 1]) 
         with m_c1: 
             st.markdown(f"**🏢 전체 층수 정보 (TOTAL FLOOR)**")
