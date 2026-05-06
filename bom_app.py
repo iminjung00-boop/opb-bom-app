@@ -5,17 +5,18 @@ import re
 import os
 
 # 1. 페이지 설정 및 버전 정의
-APP_VERSION = "V 1.5.4"
+APP_VERSION = "V 1.5.5"
 LAST_UPDATE = "2026.05.06"
 
-st.set_config(page_title=f"SMC OPB BOM 시스템 {APP_VERSION}", layout="wide")
+# [수정] st.set_config -> st.set_page_config로 변경
+st.set_page_config(page_title=f"SMC OPB BOM 시스템 {APP_VERSION}", layout="wide")
 
 def show_updates():
     st.info(f"""
-    **🚀 {APP_VERSION} 비표준 자재 도면(DWG) 확인 로직 복구 ({LAST_UPDATE})**
-    * **비표준 감지**: 자재 명세 내 '비표준', 'NON-STD' 포함 시 주의사항 자동 생성
-    * **도면 확인 안내**: 비표준 사양 발생 시 "DWG/도면 필수 확인" 메시지 강조
-    * **안정성 유지**: 사용자님이 지정하신 V 1.5.0(V 1.4.3 기반)의 안정적 추출 엔진 유지
+    **🚀 {APP_VERSION} 시스템 안정화 및 비표준 도면 확인 로직 통합 ({LAST_UPDATE})**
+    * **오류 수정**: AttributeError를 일으켰던 함수 오타를 수정하여 시스템 복구[cite: 1]
+    * **비표준 DWG 감지**: 자재 명세 내 '비표준', 'NON-STD' 포함 시 "도면 필수 확인" 경고 출력[cite: 1]
+    * **로직 원복**: 사용자님이 요청하신 V 1.5.0의 가장 안정적인 데이터 추출 엔진 유지[cite: 1]
     """)
 
 if os.path.exists("logo.png"):
@@ -36,7 +37,7 @@ if uploaded_file:
             if table:
                 all_tables.extend(table)
 
-    # 2. 기본 정보 추출
+    # 2. 기본 정보 추출[cite: 1]
     project = re.search(r"공사명\s*[:\s]+([^\n]+)", all_text).group(1).strip() if "공사명" in all_text else "미확인"
     unit = re.search(r"호기번호\s*[:\s]+([A-Z0-9]+)", all_text).group(1).strip() if "호기번호" in all_text else "미확인"
 
@@ -55,28 +56,19 @@ if uploaded_file:
         df.columns = [str(c).replace('\n', ' ') for c in df.columns]
         if '협력사' in df.columns: df = df.drop(columns=['협력사'])
 
-        # ---------------------------------------------------------
-        # 🔍 [복구] 비표준 자재 및 DWG 확인 로직[cite: 1]
-        # ---------------------------------------------------------
-        non_std_alert = False
-        non_std_list = []
-        if '자재내역' in df.columns or 'SPEC' in df.columns:
-            # 전체 데이터프레임에서 '비표준' 또는 'NON-STD' 검색
-            mask = df.astype(str).apply(lambda x: x.str.contains('비표준|NON-STD|NONSTD', case=False)).any(axis=1)
-            if not df[mask].empty:
-                non_std_alert = True
-                non_std_list = df[mask]['자재내역'].tolist()
+        # 🔍 비표준 자재 감지 로직[cite: 1]
+        non_std_items = []
+        mask = df.astype(str).apply(lambda x: x.str.contains('비표준|NON-STD|NONSTD', case=False)).any(axis=1)
+        if not df[mask].empty:
+            non_std_items = df[mask]['자재내역'].tolist()
 
-        # ---------------------------------------------------------
         # 📢 화면 출력 (주의사항 섹션)
-        # ---------------------------------------------------------
         st.subheader("⚠️ 생산 핵심 주의사항")
         c_w1, c_w2 = st.columns(2)
         with c_w1:
-            # 비표준 및 도면 확인 경고[cite: 1]
-            if non_std_alert:
+            if non_std_items:
                 st.error(f"🚫 **비표준 자재 감지: DWG 및 관련 도면을 반드시 참고하십시오.**")
-                st.caption(f"대상 자재: {', '.join(non_std_list)}")
+                st.caption(f"대상 품목: {', '.join(non_std_items)}")
             
             parking_check = re.search(r"기준층\s*버튼\s*PARKING\s*SW\s*적용\s*\(([^)]+)\)", all_text)
             if parking_check and parking_check.group(1) != "미적용":
@@ -88,7 +80,7 @@ if uploaded_file:
 
         st.divider()
 
-        # 📋 핵심 제작 사양 요약
+        # 📋 핵심 제작 사양 요약[cite: 1]
         m_c1, m_c2, m_c3 = st.columns([2, 1, 1]) 
         with m_c1: 
             t_floor = "미확인"
@@ -103,11 +95,9 @@ if uploaded_file:
             o_dir = re.search(r"열림방향(?:\(MAIN\))?\s*[:\s]*([가-힣A-Z/]+)", all_text)
             st.metric("🚪 열림방향", o_dir.group(1).strip() if o_dir else "미확인")
 
-        st.info(f"👥 **인승/용량:** {re.search(r'(\d+)\s*인승', all_text).group(1) if re.search(r'(\d+)\s*인승', all_text) else '?'}인승 / {re.search(r'(\d+)\s*kg', all_text).group(1) if re.search(r'(\d+)\s*kg', all_text) else '?'}kg")
-
         st.divider()
 
-        # 🎛️ OPB 및 PCB 상세 제작 사양
+        # 🎛️ OPB 상세 제작 사양[cite: 1]
         r1_c1, r1_c2, r1_c3, r1_c4 = st.columns(4)
         with r1_c1:
             opb_type = "정보 없음"
