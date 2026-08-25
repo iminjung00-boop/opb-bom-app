@@ -20,7 +20,7 @@ def show_updates():
 if os.path.exists("logo.png"):
     st.image("logo.png", width=150)
 
-st.title(f"SMC OPB생산 BOM통합 시스템 {APP_VERSION}")
+st.title(f"MGD OPB생산 BOM통합 시스템 {APP_VERSION}")
 show_updates()
 
 uploaded_file = st.file_uploader("분석할 BOM PDF 파일을 선택하세요", type="pdf")
