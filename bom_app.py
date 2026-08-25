@@ -5,17 +5,17 @@ import re
 import os
 
 # 1. 페이지 설정 및 버전 정의
-APP_VERSION = "V 1.6.2"
+APP_VERSION = "V 1.6.3"
 LAST_UPDATE = "2026.05.06"
 
 st.set_page_config(page_title=f"SMC OPB BOM 시스템 {APP_VERSION}", layout="wide")
 
 def show_updates():
     st.info(f"""
-    **🚀 {APP_VERSION} 에어컨 및 PCB 상세 사양 UI 복구 ({LAST_UPDATE})**
-    * **PCB 옵션 정밀 추출**: E280A16 블록에서 GT.MAIN 등 상세 PCB 사양 추출 로직 복구
-    * **에어컨/오너스킵**: 문서 내 키워드를 감지하여 적용 여부를 대시보드에 표시
-    * **에러 원천 차단**: 이전 버전의 텍스트 스캔 방식을 유지하여 TypeError 방지
+    **🚀 {APP_VERSION} DISABLE OPB 사양 표시 기능 추가 ({LAST_UPDATE})**
+    * **DISABLE OPB 추출**: 사양 하단에 위치한 DISABLE OPB 상세 사양 텍스트를 자동 감지하여 별도 표시
+    * **PCB / 에어컨 사양 완벽 유지**: V 1.6.2의 PCB 상세 옵션 및 에어컨, 오너스킵 상태 대시보드 유지
+    * **에러 방지 구조**: TypeError 원천 차단 텍스트 검색 엔진 유지
     """)
 
 if os.path.exists("logo.png"):
@@ -37,17 +37,28 @@ if uploaded_file:
             if table:
                 all_tables.extend(table)
 
-    # 2. 기본 정보 추출[cite: 1]
+    # 2. 기본 정보 추출
     project = re.search(r"공사명\s*[:\s]+([^\n]+)", all_text).group(1).strip() if "공사명" in all_text else "미확인"
     unit = re.search(r"호기번호\s*[:\s]+([A-Z0-9]+)", all_text).group(1).strip() if "호기번호" in all_text else "미확인"
 
     st.header(f"📊 {project} ({unit})")
 
-    # 🔍 현장 도면 지시 사항 추출 (V 1.6.1 로직)[cite: 1]
+    # 🔍 현장 도면 지시 사항 추출
     dwg_instructions = []
     matches = re.findall(r"([^\.\n]*(?:MAIN|DIS)\s*OPB는\s*현장\s*도면\s*DWG\.\s*[0-9]+\s*참고하여\s*제작[^\.\n]*)", all_text)
     if matches:
         dwg_instructions = list(set([m.strip() for m in matches]))
+
+    # 🔍 DISABLE OPB 사양 텍스트 추출 (추가)
+    disable_opb_spec = []
+    # DISABLE OPB 문구 포함된 줄부터 다음 항목 또는 문단 전까지 추출
+    dis_matches = re.findall(r"([^\n]*DISABLE\s*OPB[^\n]*(?:\n[^\n]+)*)", all_text, re.IGNORECASE)
+    if dis_matches:
+        for dis_text in dis_matches:
+            # 너무 길어지지 않게 DISABLE OPB 관련 라인들만 정제
+            lines = [line.strip() for line in dis_text.split('\n') if "DISABLE" in line.upper() or "MAIN" in line.upper() or "TYPE" in line.upper() or "DWG" in line.upper() or "SPEC" in line.upper()]
+            if lines:
+                disable_opb_spec.append("\n".join(lines[:5])) # 상위 핵심 사양 라인 결합
 
     if all_tables:
         df_raw = pd.DataFrame(all_tables)
@@ -61,10 +72,7 @@ if uploaded_file:
         df = df_raw.iloc[header_idx+1:].reset_index(drop=True).dropna(axis=1, how='all')
         df.columns = [str(c).replace('\n', ' ') for c in df.columns]
 
-        # ---------------------------------------------------------
-        # 3. 데이터 정밀 추출 로직 (V 1.5.0 기반 복구)[cite: 1]
-        # ---------------------------------------------------------
-        
+        # 3. 데이터 정밀 추출 로직
         # (1) A2000 층수 정보
         total_floors_display = "미확인"
         a2000_area = re.search(r"A2000.*?TOTAL\s*FLOOR(.*?)(?=FRONT\s*STOP\s*FLOOR|HX\s*1000|C2620|$)", all_text, re.DOTALL | re.IGNORECASE)
@@ -80,7 +88,7 @@ if uploaded_file:
                     material_info = f"* MATERIAL : {mat_match.group(1).strip()}"
                     break
 
-        # (3) PCB 옵션 및 에어컨 적용 여부[cite: 1]
+        # (3) PCB 옵션 및 에어컨 적용 여부
         pcb_option = "정보 없음"
         pcb_row = df[df.astype(str).apply(lambda x: x.str.contains('E280A16')).any(axis=1)]
         if not pcb_row.empty:
@@ -91,7 +99,7 @@ if uploaded_file:
         aircon = "✅ 적용" if any(k in all_text.upper() for k in ["AIR-CON", "에어컨"]) else "❌ 미적용"
         skip_sw = "✅ 적용" if any(k in all_text.upper() for k in ["SKIP S/W", "오너스킵"]) else "❌ 미적용"
 
-        # 4. 화면 출력 (주의사항)[cite: 1]
+        # 4. 화면 출력 (주의사항)
         st.subheader("⚠️ 생산 핵심 주의사항")
         c_w1, c_w2 = st.columns(2)
         with c_w1:
@@ -109,7 +117,7 @@ if uploaded_file:
 
         st.divider()
 
-        # 핵심 사양 요약[cite: 1]
+        # 핵심 사양 요약
         m_c1, m_c2, m_c3 = st.columns([2, 1, 1]) 
         with m_c1: 
             st.markdown(f"**🏢 전체 층수 정보 (TOTAL FLOOR)**")
@@ -123,7 +131,7 @@ if uploaded_file:
 
         st.divider()
 
-        # 🎛️ 상세 제작 사양 (에어컨/PCB 복구)[cite: 1]
+        # 상세 제작 사양
         r1_c1, r1_c2, r1_c3, r1_c4 = st.columns(4)
         with r1_c1:
             opb_type = "정보 없음"
@@ -138,7 +146,7 @@ if uploaded_file:
             sw_d = re.search(r"S/W\s*PANEL.*?DWG\s*NO\.?\s*[:\s]*([0-9A-Z]+)", all_text, re.IGNORECASE | re.DOTALL)
             st.info(f"📄 **도면 번호**\n\n{sw_d.group(1) if sw_d else '정보 없음'}")
 
-        # [추가된 PCB/에어컨 대시보드][cite: 1]
+        # PCB/에어컨 대시보드
         r2_c1, r2_c2, r2_c3, r2_c4 = st.columns(4)
         with r2_c1:
             indicator_match = re.search(r"INDICATOR\s*DATA\s*[:\s]*([^\n]+)", all_text, re.IGNORECASE)
@@ -149,9 +157,21 @@ if uploaded_file:
 
         st.divider()
 
+        # ♿ DISABLE OPB 사양 표시 섹션 (주요 자재 투입 명세 바로 위에 위치)
+        if disable_opb_spec or "DISABLE OPB" in all_text.upper():
+            st.subheader("♿ DISABLE OPB 상세 사양")
+            if disable_opb_spec:
+                for dis_info in set(disable_opb_spec):
+                    st.warning(f"📌 **DISABLE OPB 사양:**\n\n{dis_info}")
+            else:
+                st.info("ℹ️ DISABLE OPB 사양이 포함되어 있으나, 자재 명세 표 항목을 확인해 주세요.")
+            st.divider()
+
+        # 주요 자재 투입 명세
         st.subheader("🔘 주요 자재 투입 명세 (핵심)")
         target_mask = df.astype(str).apply(lambda x: x.str.contains('BUTTON|버튼|HIP|SJ21|PCB|BOARD|E280|E281|E282', case=False, na=False)).any(axis=1)
         st.table(df[target_mask])
 
+        # 전체 자재 리스트
         st.subheader("📦 전체 자재 리스트")
         st.dataframe(df, use_container_width=True, hide_index=True)
