@@ -5,17 +5,16 @@ import re
 import os
 
 # 1. 페이지 설정 및 버전 정의
-APP_VERSION = "V 1.6.3"
+APP_VERSION = "V 1.6.4"
 LAST_UPDATE = "2026.05.06"
 
 st.set_page_config(page_title=f"SMC OPB BOM 시스템 {APP_VERSION}", layout="wide")
 
 def show_updates():
     st.info(f"""
-    **🚀 {APP_VERSION} DISABLE OPB 사양 표시 기능 추가 ({LAST_UPDATE})**
-    * **DISABLE OPB 추출**: 사양 하단에 위치한 DISABLE OPB 상세 사양 텍스트를 자동 감지하여 별도 표시
-    * **PCB / 에어컨 사양 완벽 유지**: V 1.6.2의 PCB 상세 옵션 및 에어컨, 오너스킵 상태 대시보드 유지
-    * **에러 방지 구조**: TypeError 원천 차단 텍스트 검색 엔진 유지
+    **🚀 {APP_VERSION} DISABLE OPB 상세 사양 추출 로직 최적화 ({LAST_UPDATE})**
+    * **DISABLE OPB 정밀 분석**: E281A/E281 블록 내부의 BOX 규격, 버튼 적용, 재질, 장애인 마크 삭제 등 핵심 옵션 추출
+    * **안정성 유지**: 이전 버전의 에러 방지 및 기존 UI 구조 완벽 보존
     """)
 
 if os.path.exists("logo.png"):
@@ -49,17 +48,6 @@ if uploaded_file:
     if matches:
         dwg_instructions = list(set([m.strip() for m in matches]))
 
-    # 🔍 DISABLE OPB 사양 텍스트 추출 (추가)
-    disable_opb_spec = []
-    # DISABLE OPB 문구 포함된 줄부터 다음 항목 또는 문단 전까지 추출
-    dis_matches = re.findall(r"([^\n]*DISABLE\s*OPB[^\n]*(?:\n[^\n]+)*)", all_text, re.IGNORECASE)
-    if dis_matches:
-        for dis_text in dis_matches:
-            # 너무 길어지지 않게 DISABLE OPB 관련 라인들만 정제
-            lines = [line.strip() for line in dis_text.split('\n') if "DISABLE" in line.upper() or "MAIN" in line.upper() or "TYPE" in line.upper() or "DWG" in line.upper() or "SPEC" in line.upper()]
-            if lines:
-                disable_opb_spec.append("\n".join(lines[:5])) # 상위 핵심 사양 라인 결합
-
     if all_tables:
         df_raw = pd.DataFrame(all_tables)
         header_idx = 0
@@ -71,6 +59,28 @@ if uploaded_file:
         df_raw.columns = df_raw.iloc[header_idx]
         df = df_raw.iloc[header_idx+1:].reset_index(drop=True).dropna(axis=1, how='all')
         df.columns = [str(c).replace('\n', ' ') for c in df.columns]
+
+        # 🔍 DISABLE OPB 이미지 기반 사양 정밀 추출
+        dis_info_list = []
+        dis_block = df[df.astype(str).apply(lambda x: x.str.contains('DISABLE OPB|E281A', case=False, na=False)).any(axis=1)]
+        
+        if not dis_block.empty:
+            dis_content = "\n".join([" ".join(row.dropna().astype(str).values) for _, row in dis_block.iterrows()])
+            
+            # 항목별 추출
+            box_m = re.search(r"BOX\s*[:\s]*([\d\s*xX,\.~10STOP-]+)", dis_content)
+            type_m = re.search(r"(N221WG[^\s,]*)", dis_content)
+            btn_m = re.search(r"(BUTTON\s*[:\s]*[^\n]+)", dis_content)
+            mat_m = re.search(r"(MATERIAL\s*[:\s]*[^\n]+)", dis_content)
+            
+            if type_m: dis_info_list.append(f"📌 **타입/품명**: {type_m.group(1).strip()}")
+            if box_m: dis_info_list.append(f"📏 **BOX 규격**: {box_m.group(1).strip()}")
+            if btn_m: dis_info_list.append(f"🔘 **버튼 사양**: {btn_m.group(1).strip()}")
+            if mat_m: dis_info_list.append(f"🎨 **재질**: {mat_m.group(1).strip()}")
+            if "장애자 마크 삭제" in dis_content or "장애인 마크 삭제" in all_text:
+                dis_info_list.append("⚠️ **특이사항**: 장애자 마크 삭제")
+            if "하부 면취가공" in dis_content or "면취가공" in all_text:
+                dis_info_list.append("🔧 **가공 옵션**: 하부 면취가공 할 것 (C0.5)")
 
         # 3. 데이터 정밀 추출 로직
         # (1) A2000 층수 정보
@@ -157,15 +167,19 @@ if uploaded_file:
 
         st.divider()
 
-        # ♿ DISABLE OPB 사양 표시 섹션 (주요 자재 투입 명세 바로 위에 위치)
-        if disable_opb_spec or "DISABLE OPB" in all_text.upper():
-            st.subheader("♿ DISABLE OPB 상세 사양")
-            if disable_opb_spec:
-                for dis_info in set(disable_opb_spec):
-                    st.warning(f"📌 **DISABLE OPB 사양:**\n\n{dis_info}")
-            else:
-                st.info("ℹ️ DISABLE OPB 사양이 포함되어 있으나, 자재 명세 표 항목을 확인해 주세요.")
-            st.divider()
+        # ♿ DISABLE OPB 상세 사양 (이미지 데이터 정밀 표시)
+        st.subheader("♿ DISABLE OPB 상세 사양")
+        if dis_info_list:
+            d_col1, d_col2 = st.columns(2)
+            for idx, item in enumerate(dis_info_list):
+                if idx % 2 == 0:
+                    d_col1.warning(item)
+                else:
+                    d_col2.warning(item)
+        else:
+            st.info("ℹ️ 해당 PDF에는 DISABLE OPB 사양이 포함되어 있지 않거나 일반 표 형식입니다.")
+        
+        st.divider()
 
         # 주요 자재 투입 명세
         st.subheader("🔘 주요 자재 투입 명세 (핵심)")
